@@ -3,9 +3,7 @@ import json
 import os
 
 import model
-from utils import *
-
-
+from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, model_dir, encoder, clip_norm, model_name, model_saving_name, eval_frequency=4000):
     model.train()
@@ -14,13 +12,12 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
     print_freq = 400
     dev_score_list = []
 
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        model = torch.nn.DataParallel(model)
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    model = torch.nn.DataParallel(model, device_ids=[0])
     
     
-    top1 = utils.imsitu_scorer.imsitu_scorer(encoder, 1, 3)
-    top5 = utils.imsitu_scorer.imsitu_scorer(encoder, 5, 3)
+    top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
+    top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
     for epoch in range(max_epoch):
       for i, (_, img, verb, labels) in enumerate(train_loader):
@@ -78,8 +75,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
 
           print('current train loss', train_loss)
           train_loss = 0
-          top1 = utils.imsitu_scorer.imsitu_scorer(encoder, 1, 3)
-          top5 = utils.imsitu_scorer.imsitu_scorer(encoder, 5, 3)
+          top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
+          top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
       del role_predict, loss, img, verb, labels
 
@@ -90,8 +87,8 @@ def eval(model, dev_loader, encoder, write_to_file = False):
     model.eval()
 
     print ('evaluating model...')
-    top1 = utils.imsitu_scorer.imsitu_scorer(encoder, 1, 3, write_to_file)
-    top5 = utils.imsitu_scorer.imsitu_scorer(encoder, 5, 3)
+    top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3, write_to_file)
+    top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
     with torch.no_grad():
 
       for i, (img_id, img, verb, labels) in enumerate(dev_loader):
@@ -123,9 +120,9 @@ if __name__ == "__main__":
     parser.add_argument('--test', action='store_true', help='Only use the testing mode')
     parser.add_argument('--dataset_folder', type=str, default='./imSitu', help='Location of annotations')
     parser.add_argument('--imgset_dir', type=str, default='./resized_256', help='Location of original images')
-    parser.add_argument('--train_file', default="imSitu/train.json", type=str, help='trainfile name')
-    parser.add_argument('--dev_file', default="imSitu/dev.json", type=str, help='dev file name')
-    parser.add_argument('--test_file', default="imSitu/test.json", type=str, help='test file name')
+    parser.add_argument('--train_file', default="train.json", type=str, help='trainfile name')
+    parser.add_argument('--dev_file', default="dev.json", type=str, help='dev file name')
+    parser.add_argument('--test_file', default="test.json", type=str, help='test file name')
     parser.add_argument('--model_saving_name', type=str, help='saving name of the outpul model')
 
     parser.add_argument('--epochs', type=int, default=500)
@@ -145,19 +142,19 @@ if __name__ == "__main__":
 
     train_set = json.load(open(dataset_folder + '/' + args.train_file))
 
-    encoder = utils.imsitu_encoder.imsitu_encoder(train_set)
+    encoder = imsitu_encoder.imsitu_encoder(train_set)
 
-    model = model.build_ggnn_baseline(encoder.get_num_roles(),encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
+    model = model.build_ggnn_baseline(encoder.get_num_roles(), encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
 
-    train_set = utils.imsitu_loader.imsitu_loader(imgset_folder, train_set, encoder,'train', encoder.train_transform)
+    train_set = imsitu_loader.imsitu_loader(imgset_folder, train_set, encoder,'train', encoder.train_transform)
     train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
 
     dev_set = json.load(open(dataset_folder + '/' + args.dev_file))
-    dev_set = utils.imsitu_loader.imsitu_loader(imgset_folder, dev_set, encoder, 'val', encoder.dev_transform)
+    dev_set = imsitu_loader.imsitu_loader(imgset_folder, dev_set, encoder, 'val', encoder.dev_transform)
     dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
 
     test_set = json.load(open(dataset_folder + '/' + args.test_file))
-    test_set = utils.imsitu_loader.imsitu_loader(imgset_folder, test_set, encoder, 'test', encoder.dev_transform)
+    test_set = imsitu_loader.imsitu_loader(imgset_folder, test_set, encoder, 'test', encoder.dev_transform)
     test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
 
     if not os.path.exists(args.output_dir):
@@ -174,7 +171,7 @@ if __name__ == "__main__":
       args.train_all = True
       if len(args.resume_model) == 0:
           raise Exception('[pretrained module] not specified')
-      utils.load_net(args.resume_model, [model])
+      load_net(args.resume_model, [model])
       optimizer = torch.optim.Adamax(model.parameters(), lr=1e-3)
       model_name = 'resume_all'
 
