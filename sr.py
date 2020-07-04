@@ -5,11 +5,11 @@ import os
 import model
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
-def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, model_dir, encoder, clip_norm, model_name, model_saving_name, eval_frequency=4000):
+def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, model_dir, encoder, clip_norm, model_name, model_saving_name, eval_frequency=2000, verbose=False):
     model.train()
     train_loss = 0
     total_steps = 0
-    print_freq = 400
+    print_flag = False
     dev_score_list = []
 
     print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -20,16 +20,31 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
     top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
     for epoch in range(max_epoch):
+      print('Starting epoch: ', epoch)
       for i, (_, img, verb, labels) in enumerate(train_loader):
         total_steps += 1
 
         img = torch.autograd.Variable(img.cuda())
         verb = torch.autograd.Variable(verb.cuda())
         labels = torch.autograd.Variable(labels.cuda())
+        
+        #if verbose flag is set and iterated 400 images then print
+        if total_steps % 400 == 0 and verbose:
+          print_flag = True
 
+        if print_flag:
+          print('Predicting roles in frame')
+        
         role_predict = model(img, verb)
+
+        if print_flag:
+          print('Calculating loss')
+        
         loss = model.module.calculate_loss(verb, role_predict, labels)
 
+        if print_flag:
+          print('Backpropragating through time')
+        
         loss.backward()
 
         torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm)
@@ -43,7 +58,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         top5.add_point_noun(verb, role_predict, labels)
 
 
-        if total_steps % print_freq == 0:
+        if print_flag:
           top1_a = top1.get_average_results_nouns()
           top5_a = top5.get_average_results_nouns()
           print ("{},{},{}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
@@ -78,9 +93,11 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
           top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
           top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
+      if print_flag is True:
+        print_flag = False
+      
       del role_predict, loss, img, verb, labels
-
-    print('Epoch ', epoch, ' completed!')
+    
     scheduler.step()
 
 def eval(model, dev_loader, encoder, write_to_file = False):
@@ -124,6 +141,7 @@ if __name__ == "__main__":
     parser.add_argument('--dev_file', default="dev.json", type=str, help='dev file name')
     parser.add_argument('--test_file', default="test.json", type=str, help='test file name')
     parser.add_argument('--model_saving_name', type=str, help='saving name of the outpul model')
+    parser.add_argument('--verbose', action='store_true', help='set verbose mode')
 
     parser.add_argument('--epochs', type=int, default=500)
     parser.add_argument('--seed', type=int, default=1111, help='random seed')
@@ -222,7 +240,7 @@ if __name__ == "__main__":
     else:
       print('Model training started!')
       train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, args.output_dir, encoder, clip_norm, model_name, args.model_saving_name,
-            )
+      verbose=args.verbose)
 
 
 
