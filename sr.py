@@ -29,7 +29,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         labels = torch.autograd.Variable(labels.cuda())
         
         #if verbose flag is set and iterated 400 images then print
-        if i % 400 == 0 and verbose:
+        if total_steps % 400 == 0 and verbose:
           print_flag = True
 
         if print_flag:
@@ -65,7 +65,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
             .format(total_steps-1, i,
               utils.format_dict(top1_a, "{:.2f}", "1-"),
               utils.format_dict(top5_a,"{:.2f}","5-"),
-              loss.item(), train_loss / ( (total_steps-1)%eval_frequency)
+              loss.item(), train_loss/((total_steps-1)%eval_frequency)
             )
           )
 
