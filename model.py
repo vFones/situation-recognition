@@ -32,30 +32,28 @@ class GGNN(nn.Module):
     Mode: SelectNode
     Implementation based on https://arxiv.org/abs/1511.05493
     """
-    def __init__(self, state_dim, n_node,  n_steps):
+    def __init__(self, n_node):
         super(GGNN, self).__init__()
 
-        self.state_dim = state_dim
         self.n_node = n_node
-        self.n_steps = n_steps
 
         #neighbour projection
-        self.W_p = nn.Linear(state_dim, state_dim)
+        self.W_p = nn.Linear(1024, 1024)
         #weights of update gate
-        self.W_z = nn.Linear(state_dim, state_dim)
-        self.U_z = nn.Linear(state_dim, state_dim)
+        self.W_z = nn.Linear(1024, 1024)
+        self.U_z = nn.Linear(1024, 1024)
         #weights of reset gate
-        self.W_r = nn.Linear(state_dim, state_dim)
-        self.U_r = nn.Linear(state_dim, state_dim)
+        self.W_r = nn.Linear(1024, 1024)
+        self.U_r = nn.Linear(1024, 1024)
         #weights of transform
-        self.W_h = nn.Linear(state_dim, state_dim)
-        self.U_h = nn.Linear(state_dim, state_dim)
+        self.W_h = nn.Linear(1024, 1024)
+        self.U_h = nn.Linear(1024, 1024)
 
     def forward(self, init_node, mask):
 
         hidden_state = init_node
 
-        for t in range(self.n_steps):
+        for t in range(4):
             # calculating neighbour info
             neighbours = hidden_state.contiguous().view(mask.size(0), self.n_node, -1)
             neighbours = neighbours.expand(self.n_node, neighbours.size(0), neighbours.size(1), neighbours.size(2))
@@ -88,45 +86,40 @@ class GGNN_Baseline(nn.Module):
 
         img_features = self.convnet(v_org)
 
-        v = img_features
-
-        batch_size = v.size(0)
+        batch_size = img_features.size(0)
 
         role_idx = self.encoder.get_role_ids_batch(gt_verb)
 
-        if torch.cuda.is_available():
-            role_idx = role_idx.to(torch.device('cuda'))
+        role_idx = role_idx.to(torch.device('cuda'))
 
         # repeat single image for max role count a frame can have
-        img = v
+        img_features = img_features.expand(self.encoder.max_role_count, img_features.size(0), img_features.size(1))
 
-        img = img.expand(self.encoder.max_role_count, img.size(0), img.size(1))
-
-        img = img.transpose(0,1)
-        img = img.contiguous().view(batch_size * self.encoder.max_role_count, -1)
+        img_features = img_features.transpose(0,1)
+        img_features = img_features.contiguous().view(batch_size * self.encoder.max_role_count, -1)
 
         verb_embd = self.verb_emb(gt_verb)
         role_embd = self.role_emb(role_idx)
+
         role_embd = role_embd.view(batch_size * self.encoder.max_role_count, -1)
 
         verb_embed_expand = verb_embd.expand(self.encoder.max_role_count, verb_embd.size(0), verb_embd.size(1))
         verb_embed_expand = verb_embed_expand.transpose(0,1)
         verb_embed_expand = verb_embed_expand.contiguous().view(batch_size * self.encoder.max_role_count, -1)
 
-        input2ggnn = img * role_embd * verb_embed_expand
+        input2ggnn = img_features * role_embd * verb_embed_expand
 
         #mask out non exisiting roles from max role count a frame can have
         mask = self.encoder.get_adj_matrix_noself(gt_verb)
-        if torch.cuda.is_available():
-            mask = mask.to(torch.device('cuda'))
+        mask = mask.to(torch.device('cuda'))
 
         out = self.ggnn(input2ggnn, mask)
 
         logits = self.classifier(out)
 
-        role_label_pred = logits.contiguous().view(v.size(0), self.encoder.max_role_count, -1)
+        # return role_label_pred
+        return logits.contiguous().view(batch_size, self.encoder.max_role_count, -1)
 
-        return role_label_pred
 
     def calculate_loss(self, gt_verbs, role_label_pred, gt_labels):
 
@@ -140,22 +133,18 @@ class GGNN_Baseline(nn.Module):
         role_label_pred = role_label_pred.transpose(0,1)
         role_label_pred = role_label_pred.contiguous().view(-1, role_label_pred.size(-1))
 
-        loss = criterion(role_label_pred, gt_label_turned.squeeze(1)) * 3
-
-        return loss
+        #return loss
+        return criterion(role_label_pred, gt_label_turned.squeeze(1)) * 3
 
 def build_ggnn_baseline(n_roles, n_verbs, num_ans_classes, encoder):
 
-    hidden_size = 1024
-
     covnet = vgg16_modified()
-    role_emb = nn.Embedding(n_roles+1, hidden_size, padding_idx=n_roles)
-    verb_emb = nn.Embedding(n_verbs, hidden_size)
-    ggnn = GGNN(state_dim = hidden_size, n_node=encoder.max_role_count,
-                n_steps=4)
+    role_emb = nn.Embedding(n_roles+1, 1024, padding_idx=n_roles)
+    verb_emb = nn.Embedding(n_verbs, 1024)
+    ggnn = GGNN(n_node=encoder.max_role_count)
     classifier = nn.Sequential(
         nn.Dropout(0.5),
-        nn.Linear(hidden_size, num_ans_classes)
+        nn.Linear(1024, num_ans_classes)
     )
 
     return GGNN_Baseline(covnet, role_emb, verb_emb, ggnn, classifier, encoder)

@@ -13,7 +13,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
     dev_score_list = []
 
     print("Let's use", torch.cuda.device_count(), "GPUs!")
-    model = torch.nn.DataParallel(model, device_ids=[0])
+    model = torch.nn.DataParallel(model)
     
     
     top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
@@ -28,7 +28,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         labels = torch.autograd.Variable(labels.cuda())
 
         role_predict = model(img, verb)
-        loss = model.calculate_loss(verb, role_predict, labels)
+        loss = model.module.calculate_loss(verb, role_predict, labels)
 
         loss.backward()
 
