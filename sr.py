@@ -20,7 +20,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
     top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
     for epoch in range(max_epoch):
-      print('Starting epoch: ', epoch)
+      print('Starting epoch: ', epoch, ' learning rate:')
+
       for i, (_, img, verb, labels) in enumerate(train_loader):
         total_steps += 1
 
@@ -193,14 +194,14 @@ if __name__ == "__main__":
       if len(args.resume_model) == 0:
           raise Exception('[pretrained module] not specified')
       load_net(args.resume_model, [model])
-      optimizer = torch.optim.Adamax(model.parameters(), lr=1e-3)
+      optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-3)
       model_name = 'resume_all'
 
     else:
       print('Training from the scratch.')
       model_name = 'train_full'
       utils.set_trainable(model, True)
-      optimizer = torch.optim.Adamax([
+      optimizer = torch.optim.RMSprop([
           {'params': model.convnet.parameters(), 'lr': 5e-5},
           {'params': model.role_emb.parameters()},
           {'params': model.verb_emb.parameters()},
@@ -208,8 +209,8 @@ if __name__ == "__main__":
           {'params': model.classifier.parameters()}
       ], lr=1e-3)
 
-    scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.9)
-
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10 ,gamma=0.85)
+    
     if args.evaluate:
       top1, top5, val_loss = eval(model, dev_loader, encoder)
 
