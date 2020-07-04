@@ -19,7 +19,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
   for epoch in range(max_epoch):
-    print('Starting epoch: ', epoch, ', current learning rate: ', scheduler.get_lr())
+    print('Starting epoch: ', epoch,
+          ', current learning rate: ', scheduler.get_last_lr())
     
     for i, (_, img, verb, labels) in enumerate(train_loader):
       total_steps += 1
@@ -35,7 +36,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
       if print_flag is True:
         print('Predicting roles in frame')
         
-        role_predict = model(img, verb)
+      role_predict = model(img, verb)
 
       if print_flag is True:
         print('Calculating loss')
@@ -96,8 +97,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
-      if print_flag is True:
-        print_flag = False
+    if print_flag is True:
+      print_flag = False
       
     #del role_predict, loss, img, verb, labels
     
@@ -189,24 +190,24 @@ if __name__ == "__main__":
 
   if args.resume_training:
     print('Resume training from: {}'.format(args.resume_model))
-    args.train_all = True
     if len(args.resume_model) == 0:
       raise Exception('[pretrained module] not specified')
     utils.load_net(args.resume_model, [model])
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-3)
+    optimizer = torch.optim.RMSprop(model.parameters(), alpha=0.9, lr=1e-3)
     model_name = 'resume_all'
 
   else:
     print('Training from the scratch.')
     model_name = 'train_full'
     utils.set_trainable(model, True)
-    optimizer = torch.optim.RMSprop([
+    optimizer = torch.optim.RMSprop(model.parameters(), alpha=0.9, lr=1e-3)
+    ''' [
         {'params': model.convnet.parameters(), 'lr': 5e-5},
         {'params': model.role_emb.parameters()},
         {'params': model.verb_emb.parameters()},
         {'params': model.ggnn.parameters()},
         {'params': model.classifier.parameters()}
-    ], lr=1e-3)
+    ], lr=1e-3) '''
 
   scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10 ,gamma=0.85)
     
