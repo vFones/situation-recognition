@@ -21,7 +21,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
   for epoch in range(max_epoch):
     print('Starting epoch: ', epoch,
           ', current learning rate: ', scheduler.get_last_lr())
-    
+
     for i, (_, img, verb, labels) in enumerate(train_loader):
       total_steps += 1
 
@@ -97,9 +97,10 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
-    if print_flag is True:
-      print_flag = False
+      if print_flag is True:
+        print_flag = False
       
+    print('batches size: ', i)
     #del role_predict, loss, img, verb, labels
     
   scheduler.step()
