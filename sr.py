@@ -20,8 +20,13 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
     top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
     for epoch in range(max_epoch):
-      print('Starting epoch: ', epoch, ' learning rate:')
+      
+      for param_group in optimizer.param_groups:
+        lr = param_group['lr']
+        break
 
+      print('Starting epoch: ', epoch, ', current learning rate: ', lr)
+      
       for i, (_, img, verb, labels) in enumerate(train_loader):
         total_steps += 1
 
@@ -33,17 +38,17 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         if total_steps % 400 == 0 and verbose:
           print_flag = True
 
-        if print_flag:
+        if print_flag is True:
           print('Predicting roles in frame')
         
         role_predict = model(img, verb)
 
-        if print_flag:
+        if print_flag is True:
           print('Calculating loss')
         
         loss = model.module.calculate_loss(verb, role_predict, labels)
 
-        if print_flag:
+        if print_flag is True:
           print('Backpropragating through time')
         
         loss.backward()
@@ -59,7 +64,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         top5.add_point_noun(verb, role_predict, labels)
 
 
-        if print_flag:
+        if print_flag is True:
           top1_a = top1.get_average_results_nouns()
           top5_a = top5.get_average_results_nouns()
           print("Total_steps: {}, elements n°: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
@@ -100,7 +105,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         if print_flag is True:
           print_flag = False
       
-      del role_predict, loss, img, verb, labels
+      #del role_predict, loss, img, verb, labels
     
     scheduler.step()
 
@@ -193,7 +198,7 @@ if __name__ == "__main__":
       args.train_all = True
       if len(args.resume_model) == 0:
           raise Exception('[pretrained module] not specified')
-      load_net(args.resume_model, [model])
+      utils.load_net(args.resume_model, [model])
       optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-3)
       model_name = 'resume_all'
 
