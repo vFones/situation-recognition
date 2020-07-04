@@ -29,7 +29,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         labels = torch.autograd.Variable(labels.cuda())
         
         #if verbose flag is set and iterated 400 images then print
-        if total_steps % 400 == 0 and verbose:
+        if i % 400 == 0 and verbose:
           print_flag = True
 
         if print_flag:
@@ -61,10 +61,13 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         if print_flag:
           top1_a = top1.get_average_results_nouns()
           top5_a = top5.get_average_results_nouns()
-          print ("{},{},{}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
-                  .format(total_steps-1,epoch,i, utils.format_dict(top1_a, "{:.2f}", "1-"),
-                          utils.format_dict(top5_a,"{:.2f}","5-"), loss.item(),
-                          train_loss / ((total_steps-1)%eval_frequency) ))
+          print("Total_steps: {}, elements n°: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
+            .format(total_steps-1, i,
+              utils.format_dict(top1_a, "{:.2f}", "1-"),
+              utils.format_dict(top5_a,"{:.2f}","5-"),
+              loss.item(), train_loss / ( (total_steps-1)%eval_frequency)
+            )
+          )
 
 
         if total_steps % eval_frequency == 0:
@@ -93,8 +96,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
           top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
           top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
-      if print_flag is True:
-        print_flag = False
+        if print_flag is True:
+          print_flag = False
       
       del role_predict, loss, img, verb, labels
     
