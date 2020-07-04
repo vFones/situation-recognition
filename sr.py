@@ -158,92 +158,94 @@ if __name__ == "__main__":
   clip_norm = args.clip_norm
   n_worker = args.num_workers
 
-    dataset_folder = args.dataset_folder
-    imgset_folder = args.imgset_dir
+  dataset_folder = args.dataset_folder
+  imgset_folder = args.imgset_dir
 
-    train_set = json.load(open(dataset_folder + '/' + args.train_file))
+  train_set = json.load(open(dataset_folder + '/' + args.train_file))
 
-    encoder = imsitu_encoder.imsitu_encoder(train_set)
+  encoder = imsitu_encoder.imsitu_encoder(train_set)
 
-    model = model.build_ggnn_baseline(encoder.get_num_roles(), encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
+  model = model.build_ggnn_baseline(encoder.get_num_roles(), encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
+  
+  train_set = imsitu_loader.imsitu_loader(imgset_folder, train_set, encoder,'train', encoder.train_transform)
+  train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
 
-    train_set = imsitu_loader.imsitu_loader(imgset_folder, train_set, encoder,'train', encoder.train_transform)
-    train_loader = torch.utils.data.DataLoader(train_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
+  dev_set = json.load(open(dataset_folder + '/' + args.dev_file))
+  dev_set = imsitu_loader.imsitu_loader(imgset_folder, dev_set, encoder, 'val', encoder.dev_transform)
+  dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
 
-    dev_set = json.load(open(dataset_folder + '/' + args.dev_file))
-    dev_set = imsitu_loader.imsitu_loader(imgset_folder, dev_set, encoder, 'val', encoder.dev_transform)
-    dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
+  test_set = json.load(open(dataset_folder + '/' + args.test_file))
+  test_set = imsitu_loader.imsitu_loader(imgset_folder, test_set, encoder, 'test', encoder.dev_transform)
+  test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
 
-    test_set = json.load(open(dataset_folder + '/' + args.test_file))
-    test_set = imsitu_loader.imsitu_loader(imgset_folder, test_set, encoder, 'test', encoder.dev_transform)
-    test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
+  if not os.path.exists(args.output_dir):
+    os.mkdir(args.output_dir)
 
-    if not os.path.exists(args.output_dir):
-      os.mkdir(args.output_dir)
-
-    torch.manual_seed(args.seed)
+  torch.manual_seed(args.seed)
     
-    model.cuda()
-    torch.cuda.manual_seed(args.seed)
-    torch.backends.cudnn.benchmark = True
+  model.cuda()
+  torch.cuda.manual_seed(args.seed)
+  torch.backends.cudnn.benchmark = True
 
-    if args.resume_training:
-      print('Resume training from: {}'.format(args.resume_model))
-      args.train_all = True
-      if len(args.resume_model) == 0:
-          raise Exception('[pretrained module] not specified')
-      utils.load_net(args.resume_model, [model])
-      optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-3)
-      model_name = 'resume_all'
+  if args.resume_training:
+    print('Resume training from: {}'.format(args.resume_model))
+    args.train_all = True
+    if len(args.resume_model) == 0:
+      raise Exception('[pretrained module] not specified')
+    utils.load_net(args.resume_model, [model])
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=1e-3)
+    model_name = 'resume_all'
 
-    else:
-      print('Training from the scratch.')
-      model_name = 'train_full'
-      utils.set_trainable(model, True)
-      optimizer = torch.optim.RMSprop([
-          {'params': model.convnet.parameters(), 'lr': 5e-5},
-          {'params': model.role_emb.parameters()},
-          {'params': model.verb_emb.parameters()},
-          {'params': model.ggnn.parameters()},
-          {'params': model.classifier.parameters()}
-      ], lr=1e-3)
+  else:
+    print('Training from the scratch.')
+    model_name = 'train_full'
+    utils.set_trainable(model, True)
+    optimizer = torch.optim.RMSprop([
+        {'params': model.convnet.parameters(), 'lr': 5e-5},
+        {'params': model.role_emb.parameters()},
+        {'params': model.verb_emb.parameters()},
+        {'params': model.ggnn.parameters()},
+        {'params': model.classifier.parameters()}
+    ], lr=1e-3)
 
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10 ,gamma=0.85)
+  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10 ,gamma=0.85)
     
-    if args.evaluate:
-      top1, top5, val_loss = eval(model, dev_loader, encoder)
+  if args.evaluate:
+    top1, top5, val_loss = eval(model, dev_loader, encoder)
 
-      top1_avg = top1.get_average_results_nouns()
-      top5_avg = top5.get_average_results_nouns()
+    top1_avg = top1.get_average_results_nouns()
+    top5_avg = top5.get_average_results_nouns()
 
-      avg_score = top1_avg["verb"] + top1_avg["value"] + top1_avg["value-all"] + top5_avg["verb"] + \
-                  top5_avg["value"] + top5_avg["value-all"] + top5_avg["value*"] + top5_avg["value-all*"]
-      avg_score /= 8
+    avg_score = top1_avg["verb"] + top1_avg["value"] + top1_avg["value-all"] + top5_avg["verb"] + \
+                top5_avg["value"] + top5_avg["value-all"] + top5_avg["value*"] + top5_avg["value-all*"]
+    avg_score /= 8
 
-      print ('Dev average :{:.2f} {} {}'.format( avg_score*100,
-                                                   utils.format_dict(top1_avg,'{:.2f}', '1-'),
-                                                   utils.format_dict(top5_avg, '{:.2f}', '5-')))
-
-
-    elif args.test:
-      top1, top5, val_loss = eval(model, test_loader, encoder)
-
-      top1_avg = top1.get_average_results_nouns()
-      top5_avg = top5.get_average_results_nouns()
-
-      avg_score = top1_avg["verb"] + top1_avg["value"] + top1_avg["value-all"] + top5_avg["verb"] + \
-                  top5_avg["value"] + top5_avg["value-all"] + top5_avg["value*"] + top5_avg["value-all*"]
-      avg_score /= 8
-
-      print ('Test average :{:.2f} {} {}'.format( avg_score*100,
-                                                  utils.format_dict(top1_avg,'{:.2f}', '1-'),
-                                                    utils.format_dict(top5_avg, '{:.2f}', '5-')))
+    print('Dev average :{:.2f} {} {}'
+          .format( avg_score*100,
+          utils.format_dict(top1_avg,'{:.2f}', '1-'),
+          utils.format_dict(top5_avg, '{:.2f}', '5-')))
 
 
-    else:
-      print('Model training started!')
-      train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, args.output_dir, encoder, clip_norm, model_name, args.model_saving_name,
-      verbose=args.verbose)
+  elif args.test:
+    top1, top5, val_loss = eval(model, test_loader, encoder)
+
+    top1_avg = top1.get_average_results_nouns()
+    top5_avg = top5.get_average_results_nouns()
+
+    avg_score = top1_avg["verb"] + top1_avg["value"] + top1_avg["value-all"] + top5_avg["verb"] + \
+                top5_avg["value"] + top5_avg["value-all"] + top5_avg["value*"] + top5_avg["value-all*"]
+    avg_score /= 8
+
+    print ('Test average :{:.2f} {} {}'
+            .format( avg_score*100,
+            utils.format_dict(top1_avg,'{:.2f}', '1-'),
+            utils.format_dict(top5_avg, '{:.2f}', '5-')))
+
+
+  else:
+    print('Model training started!')
+    train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, args.output_dir, encoder, clip_norm, model_name, args.model_saving_name,
+    verbose=args.verbose)
 
 
 
