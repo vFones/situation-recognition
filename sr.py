@@ -20,12 +20,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
     top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
     for epoch in range(max_epoch):
-      
-      for param_group in optimizer.param_groups:
-        lr = param_group['lr']
-        break
 
-      print('Starting epoch: ', epoch, ', current learning rate: ', lr)
+      print('Starting epoch: ', epoch, ', current learning rate: ', scheduler.get_lr())
       
       for i, (_, img, verb, labels) in enumerate(train_loader):
         total_steps += 1
@@ -34,8 +30,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         verb = torch.autograd.Variable(verb.cuda())
         labels = torch.autograd.Variable(labels.cuda())
         
-        #if verbose flag is set and iterated 400 images then print
-        if total_steps % 400 == 0 and verbose:
+        #if verbose flag is set and iterated 40 images then print
+        if total_steps % 40 == 0 and verbose:
           print_flag = True
 
         if print_flag is True:
