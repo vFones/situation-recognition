@@ -5,8 +5,16 @@ import os
 import model
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
-def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, model_dir, encoder, clip_norm, model_name, model_saving_name, eval_frequency=2000, verbose=False):
-  model.train()
+def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, clip_norm, model_name, model_saving_name, checkpoint=None, verbose=False):
+  
+  if checkpoint is not None:
+    epoch = checkpoint['epoch']
+    model = checkpoint['model']
+    optimizer = checkpoint['optimizer']
+    scheduler = checkpoint['lr_sched']
+
+  #model.train()
+
   train_loss = 0
   total_steps = 0
   print_flag = False
@@ -30,7 +38,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
       labels = torch.autograd.Variable(labels.cuda())
         
       #if verbose flag is set and iterated 40 images then print
-      if total_steps % 40 == 0 and verbose:
+      if total_steps % 256 == 0 and verbose:
         print_flag = True
 
       if print_flag is True:
@@ -66,12 +74,12 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
           .format(total_steps-1, i,
           utils.format_dict(top1_a, "{:.2f}", "1-"),
           utils.format_dict(top5_a,"{:.2f}","5-"),
-          loss.item(), train_loss/((total_steps-1)%eval_frequency)
+          loss.item(), train_loss/((total_steps-1)%10000)
           )
         )
 
 
-      if total_steps % eval_frequency == 0:
+      if total_steps % 10000 == 0:
         top1, top5, val_loss = eval(model, dev_loader, encoder)
         model.train()
 
@@ -89,7 +97,14 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
         max_score = max(dev_score_list)
 
         if max_score == dev_score_list[-1]:
-          torch.save(model.state_dict(), model_dir + "/{}_{}.model".format( model_name, model_saving_name))
+          checkpoint = { 
+            'epoch': epoch,
+            'model': model,
+            'optimizer': optimizer,
+            'lr_sched': scheduler}
+          
+          torch.save(checkpoint, 'trained_models' + "/{}_{}.model".format( model_name, model_saving_name))
+
           print ('New best model saved! {0}'.format(max_score))
 
         print('current train loss', train_loss)
@@ -106,7 +121,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, mode
   scheduler.step()
 
 def eval(model, dev_loader, encoder, write_to_file = False):
-  model.eval()
+  #model.eval()
 
   print ('evaluating model...')
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3, write_to_file)
@@ -135,7 +150,6 @@ def eval(model, dev_loader, encoder, write_to_file = False):
 if __name__ == "__main__":
   import argparse
   parser = argparse.ArgumentParser(description="imsitu VSRL. Training, evaluation and prediction.")
-  parser.add_argument('--output_dir', type=str, default='./trained_models', help='Location to output the model')
   parser.add_argument('--resume_training', action='store_true', help='Resume training from the model [resume_model]')
   parser.add_argument('--resume_model', type=str, default='', help='The model we resume')
   parser.add_argument('--evaluate', action='store_true', help='Only use the testing mode')
@@ -180,8 +194,9 @@ if __name__ == "__main__":
   test_set = imsitu_loader.imsitu_loader(imgset_folder, test_set, encoder, 'test', encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=batch_size, shuffle=True, num_workers=n_worker)
 
-  if not os.path.exists(args.output_dir):
-    os.mkdir(args.output_dir)
+  if not os.path.exists('trained_models'):
+    os.mkdir('trained_models')
+  checkpoint = None
 
   torch.manual_seed(args.seed)
     
@@ -191,9 +206,13 @@ if __name__ == "__main__":
 
   if args.resume_training:
     print('Resume training from: {}'.format(args.resume_model))
+    checkpoint = torch.load('trained_models'+'/'+args.resume_model)
+
     if len(args.resume_model) == 0:
       raise Exception('[pretrained module] not specified')
+
     utils.load_net(args.resume_model, [model])
+    
     optimizer = torch.optim.RMSprop(model.parameters(), alpha=0.9, lr=1e-3)
     model_name = 'resume_all'
 
@@ -211,7 +230,7 @@ if __name__ == "__main__":
     ], lr=1e-3) '''
 
   scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10 ,gamma=0.85)
-    
+  
   if args.evaluate:
     top1, top5, val_loss = eval(model, dev_loader, encoder)
 
@@ -246,8 +265,8 @@ if __name__ == "__main__":
 
   else:
     print('Model training started!')
-    train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, args.output_dir, encoder, clip_norm, model_name, args.model_saving_name,
-    verbose=args.verbose)
+    train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, clip_norm, model_name, args.model_saving_name,
+    checkpoint=checkpoint, verbose=args.verbose)
 
 
 
