@@ -162,11 +162,11 @@ if __name__ == "__main__":
   n_epoch = args.epochs
   clip_norm = args.clip_norm
 
+  train_set = json.load(open(args.dataset_folder + '/' + args.train_file))
   encoder = imsitu_encoder.imsitu_encoder(train_set)
 
   model = model.build_ggnn_baseline(encoder.get_num_roles(), encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
   
-  train_set = json.load(open(args.dataset_folder + '/' + args.train_file))
   train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_set, encoder,'train', encoder.train_transform)
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=256, shuffle=True, num_workers=16)
 
