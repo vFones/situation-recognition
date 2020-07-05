@@ -150,6 +150,8 @@ if __name__ == "__main__":
   parser.add_argument('--test', action='store_true', help='Only use the testing mode')
   parser.add_argument('--model_saving_name', type=str, help='saving name of the outpul model')
   parser.add_argument('--verbose', action='store_true', help='set verbose mode')
+  parser.add_argument('--dataset_folder', type=str, default='./imSitu', help='Location of annotations')
+  parser.add_argument('--imgset_dir', type=str, default='./resized_256', help='Location of original images')
 
   parser.add_argument('--epochs', type=int, default=500)
   parser.add_argument('--seed', type=int, default=1111, help='random seed')
@@ -164,16 +166,16 @@ if __name__ == "__main__":
 
   model = model.build_ggnn_baseline(encoder.get_num_roles(), encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
   
-  train_set = json.load(open('imSitu/train.json'))
-  train_set = imsitu_loader.imsitu_loader('of500_images_resized', train_set, encoder,'train', encoder.train_transform)
+  train_set = json.load(open(args.dataset_folder + '/' + args.train_file))
+  train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_set, encoder,'train', encoder.train_transform)
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=256, shuffle=True, num_workers=16)
 
-  dev_set = json.load(open('imSitu/dev.json'))
-  dev_set = imsitu_loader.imsitu_loader('of500_images_resized', dev_set, encoder, 'val', encoder.dev_transform)
+  dev_set = json.load(open(args.dataset_folder + '/' + args.dev_file))
+  dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_set, encoder, 'val', encoder.dev_transform)
   dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=256, shuffle=True, num_workers=16)
 
-  test_set = json.load(open('imSitu/test.json'))
-  test_set = imsitu_loader.imsitu_loader('of500_images_resized', test_set, encoder, 'test', encoder.dev_transform)
+  test_set = json.load(open(args.dataset_folder + '/' + args.test_file))
+  test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_set, encoder, 'test', encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=256, shuffle=True, num_workers=16)
 
   if not os.path.exists('trained_models'):
@@ -182,7 +184,7 @@ if __name__ == "__main__":
 
     
   model.cuda()
-  torch.cuda.manual_seed(args.seed)
+  torch.manual_seed(args.seed)
   torch.backends.cudnn.benchmark = True
 
   if args.resume_training:
