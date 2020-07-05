@@ -21,14 +21,15 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   
   if checkpoint is not None:
     epoch = checkpoint['epoch']
-    best_score = checkpoint['best_accuracy']
+    best_score = checkpoint['best_score']
+    train_loss = checkpoint['train_loss']
+    total_steps = checkpoint['total_steps']
     model = checkpoint['model']
     optimizer = checkpoint['optimizer']
     scheduler = checkpoint['lr_sched']
     model.module.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-
 
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
@@ -61,7 +62,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       if total_steps % 256 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
-        print("epoch-{} total_steps: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
+        print("Epoch-{} total_steps: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
           .format(e, total_steps,
           utils.format_dict(top1_a, "{:.2f}", "1-"),
           utils.format_dict(top5_a,"{:.2f}","5-"),
@@ -81,7 +82,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
                     top5_avg["value"] + top5_avg["value-all"] + top5_avg["value*"] + top5_avg["value-all*"]
         avg_score /= 8
 
-        print ('Dev average :{:.2f} {} {}'.format(avg_score*100,
+        print ('Dev average: {:.2f} {} {}'.format(avg_score*100,
                                         utils.format_dict(top1_avg,'{:.2f}', '1-'),
                                         utils.format_dict(top5_avg, '{:.2f}', '5-')))
         
@@ -91,7 +92,9 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         if is_best:
           checkpoint = { 
             'epoch': e+1,
-            'best_accuracy': best_score,
+            'best_score': best_score,
+            'train_loss': train_loss,
+            'total_steps': total_steps,
             'model': model,
             'optimizer': optimizer,
             'lr_sched': scheduler,
@@ -102,9 +105,9 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
           
           torch.save(checkpoint, 'trained_models' + "/{}_{}.model".format( model_name, model_saving_name))
 
-          print ('New best model saved! {0}'.format(best_score))
+          print ('New best model saved.')
 
-        print('current train loss', train_loss/len(train_loader))
+        #print('current train loss', train_loss/len(train_loader))
         #train_loss = 0
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
