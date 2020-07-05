@@ -165,15 +165,15 @@ if __name__ == "__main__":
   model = model.build_ggnn_baseline(encoder.get_num_roles(), encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
   
   train_set = json.load(open('imSitu/train.json'))
-  train_set = imsitu_loader.imsitu_loader('resized_256', train_set, encoder,'train', encoder.train_transform)
+  train_set = imsitu_loader.imsitu_loader('of500_images_resized', train_set, encoder,'train', encoder.train_transform)
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=256, shuffle=True, num_workers=16)
 
   dev_set = json.load(open('imSitu/dev.json'))
-  dev_set = imsitu_loader.imsitu_loader('resized_256', dev_set, encoder, 'val', encoder.dev_transform)
+  dev_set = imsitu_loader.imsitu_loader('of500_images_resized', dev_set, encoder, 'val', encoder.dev_transform)
   dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=256, shuffle=True, num_workers=16)
 
   test_set = json.load(open('imSitu/test.json'))
-  test_set = imsitu_loader.imsitu_loader('resized_256', test_set, encoder, 'test', encoder.dev_transform)
+  test_set = imsitu_loader.imsitu_loader('of500_images_resized', test_set, encoder, 'test', encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=256, shuffle=True, num_workers=16)
 
   if not os.path.exists('trained_models'):
