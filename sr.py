@@ -6,12 +6,6 @@ import model
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, clip_norm, model_name, model_saving_name, checkpoint=None, verbose=False):
-  
-  if checkpoint is not None:
-    epoch = checkpoint['epoch']
-    model = checkpoint['model']
-    optimizer = checkpoint['optimizer']
-    scheduler = checkpoint['lr_sched']
 
   #model.train()
 
@@ -22,6 +16,16 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
   print("Let's use", torch.cuda.device_count(), "GPUs!")
   model = torch.nn.DataParallel(model)
+
+  if checkpoint is not None:
+    epoch = checkpoint['epoch']
+    model = checkpoint['model']
+    optimizer = checkpoint['optimizer']
+    scheduler = checkpoint['lr_sched']
+    model.module.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict']
+    )
+
 
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
@@ -96,7 +100,10 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
             'epoch': epoch,
             'model': model,
             'optimizer': optimizer,
-            'lr_sched': scheduler}
+            'lr_sched': scheduler,
+            'model_state_dict': model.module.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            }
           
           torch.save(checkpoint, 'trained_models' + "/{}_{}.model".format( model_name, model_saving_name))
 

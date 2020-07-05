@@ -10,8 +10,9 @@ def load_net(fname, net_list, prefix_list = None):
     if prefix_list is not None and len(prefix_list) > 0:
         need_modification = True
     for i in range(0, len(net_list)):
-        dict = torch.load(fname)
-
+        checkpoint = torch.load(fname)
+        dict = checkpoint['model_state_dict']
+        
         try:
             for k, v in net_list[i].state_dict().items():
                 if need_modification:
