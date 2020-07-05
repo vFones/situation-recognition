@@ -148,7 +148,6 @@ if __name__ == "__main__":
   parser.add_argument('--evaluate', action='store_true', help='Only use the testing mode')
   parser.add_argument('--test', action='store_true', help='Only use the testing mode')
   parser.add_argument('--model_saving_name', type=str, help='saving name of the outpul model')
-  parser.add_argument('--verbose', action='store_true', help='set verbose mode')
   parser.add_argument('--dataset_folder', type=str, default='./imSitu', help='Location of annotations')
   parser.add_argument('--imgset_dir', type=str, default='./resized_256', help='Location of original images')
   parser.add_argument('--train_file', type=str, default='train.json', help='Train json file')
@@ -249,7 +248,7 @@ if __name__ == "__main__":
   else:
     print('Model training started!')
     train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, model_name, args.model_saving_name,
-    checkpoint=checkpoint, verbose=args.verbose)
+    checkpoint=checkpoint)
 
 
 
