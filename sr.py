@@ -21,7 +21,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   
   if checkpoint is not None:
     epoch = checkpoint['epoch']
-    best_score = checkpoint['best_score']
+    best_score = checkpoint['best_accuracy']
     model = checkpoint['model']
     optimizer = checkpoint['optimizer']
     scheduler = checkpoint['lr_sched']
@@ -61,8 +61,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       if total_steps % 256 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
-        print("Total_steps: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
-          .format(total_steps,
+        print("epoch-{} total_steps: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
+          .format(e, total_steps,
           utils.format_dict(top1_a, "{:.2f}", "1-"),
           utils.format_dict(top5_a,"{:.2f}","5-"),
           loss.item(), train_loss/len(train_loader)
