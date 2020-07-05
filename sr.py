@@ -248,7 +248,7 @@ if __name__ == "__main__":
 
   else:
     print('Model training started!')
-    train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, clip_norm, model_name, args.model_saving_name,
+    train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, model_name, args.model_saving_name,
     checkpoint=checkpoint, verbose=args.verbose)
 
 
