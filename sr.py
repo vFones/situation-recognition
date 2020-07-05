@@ -152,7 +152,10 @@ if __name__ == "__main__":
   parser.add_argument('--verbose', action='store_true', help='set verbose mode')
   parser.add_argument('--dataset_folder', type=str, default='./imSitu', help='Location of annotations')
   parser.add_argument('--imgset_dir', type=str, default='./resized_256', help='Location of original images')
-
+  parser.add_argument('--train_file', type=str, default='train.json', help='Train json file')
+  parser.add_argument('--dev_file', type=str, default='dev.json', help='Dev json file')
+  parser.add_argument('--test_file', type=str, default='test.json', help='test json file')
+  
   parser.add_argument('--epochs', type=int, default=500)
   parser.add_argument('--seed', type=int, default=1111, help='random seed')
   parser.add_argument('--clip_norm', type=float, default=0.25)
