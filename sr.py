@@ -1,40 +1,41 @@
 import torch
 import json
 import os
+from sys import float_info
 
 import model
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
-def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, clip_norm, model_name, model_saving_name, checkpoint=None, verbose=False):
+def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_name, model_saving_name, checkpoint=None):
 
   #model.train()
 
+  epoch = 0
   train_loss = 0
   total_steps = 0
   print_flag = False
-  dev_score_list = []
+  best_score = float_info.min
 
   print("Let's use", torch.cuda.device_count(), "GPUs!")
   model = torch.nn.DataParallel(model)
-
+  
   if checkpoint is not None:
     epoch = checkpoint['epoch']
+    best_score = checkpoint['best_score']
     model = checkpoint['model']
     optimizer = checkpoint['optimizer']
     scheduler = checkpoint['lr_sched']
     model.module.load_state_dict(checkpoint['model_state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer_state_dict']
-    )
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
 
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
-  for epoch in range(max_epoch):
-    print('Starting epoch: ', epoch,
-          ', current learning rate: ', scheduler.get_last_lr(),
-          ', learning rates: ', scheduler.get_lr())
-  
+  for e in range(epoch, max_epoch):
+    print('Epoch-{0} lr: {1}'.format(e, optimizer.param_groups[0]['lr']))
+
     for i, (_, img, verb, labels) in enumerate(train_loader):
       total_steps += 1
 
@@ -42,19 +43,12 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       verb = torch.autograd.Variable(verb.cuda())
       labels = torch.autograd.Variable(labels.cuda())
         
-      #if verbose flag is set and iterated 256 images then print
-      if total_steps % 256 == 0 and verbose:
-        print_flag = True
-
-        
       role_predict = model(img, verb)
 
       loss = model.module.calculate_loss(verb, role_predict, labels)
-
-        
       loss.backward()
 
-      torch.nn.utils.clip_grad_norm_(model.parameters(), clip_norm)
+      torch.nn.utils.clip_grad_norm_(model.parameters(), 0.25)
 
       optimizer.step()
       optimizer.zero_grad()
@@ -64,8 +58,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       top1.add_point_noun(verb, role_predict, labels)
       top5.add_point_noun(verb, role_predict, labels)
 
-
-      if print_flag is True:
+      if total_steps % 256 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
         print("Total_steps: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
@@ -79,7 +72,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
       if total_steps % 256 == 0:
         top1, top5, val_loss = eval(model, dev_loader, encoder)
-        model.train()
+        #model.train()
 
         top1_avg = top1.get_average_results_nouns()
         top5_avg = top5.get_average_results_nouns()
@@ -92,30 +85,29 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
                                         utils.format_dict(top1_avg,'{:.2f}', '1-'),
                                         utils.format_dict(top5_avg, '{:.2f}', '5-')))
         
-        dev_score_list.append(avg_score)
-        max_score = max(dev_score_list)
+        is_best = avg_score > best_score
+        best_score = max(avg_score, best_score)
 
-        if max_score == dev_score_list[-1]:
+        if is_best:
           checkpoint = { 
-            'epoch': epoch,
+            'epoch': e+1,
+            'best_accuracy': best_score,
             'model': model,
             'optimizer': optimizer,
             'lr_sched': scheduler,
             'model_state_dict': model.module.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict()
             }
           
           torch.save(checkpoint, 'trained_models' + "/{}_{}.model".format( model_name, model_saving_name))
 
-          print ('New best model saved! {0}'.format(max_score))
+          print ('New best model saved! {0}'.format(best_score))
 
         print('current train loss', train_loss/len(train_loader))
         #train_loss = 0
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
-
-      if print_flag is True:
-        print_flag = False
       
     #del role_predict, loss, img, verb, labels
     
@@ -124,7 +116,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 def eval(model, dev_loader, encoder, write_to_file = False):
   #model.eval()
 
-  print ('evaluating model...')
+  print ('=> evaluating model...')
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3, write_to_file)
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
   with torch.no_grad():
@@ -165,12 +157,10 @@ if __name__ == "__main__":
   
   parser.add_argument('--epochs', type=int, default=500)
   parser.add_argument('--seed', type=int, default=1111, help='random seed')
-  parser.add_argument('--clip_norm', type=float, default=0.25)
 
   args = parser.parse_args()
 
   n_epoch = args.epochs
-  clip_norm = args.clip_norm
 
   train_set = json.load(open(args.dataset_folder + '/' + args.train_file))
   encoder = imsitu_encoder.imsitu_encoder(train_set)
