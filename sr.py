@@ -192,7 +192,7 @@ if __name__ == "__main__":
 
   if args.resume_training:
     print('Resume training from: {}'.format(args.resume_model))
-    checkpoint = torch.load('trained_models'+'/'+args.resume_model)
+    checkpoint = torch.load(args.resume_model)
 
     if len(args.resume_model) == 0:
       raise Exception('[pretrained module] not specified')

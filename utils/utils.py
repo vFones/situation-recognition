@@ -10,10 +10,7 @@ def load_net(fname, net_list, prefix_list = None):
     if prefix_list is not None and len(prefix_list) > 0:
         need_modification = True
     for i in range(0, len(net_list)):
-        if not torch.cuda.is_available():
-            dict = torch.load(fname, map_location='cpu')
-        else:
-            dict = torch.load(fname)
+        dict = torch.load(fname)
 
         try:
             for k, v in net_list[i].state_dict().items():
