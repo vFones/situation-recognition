@@ -8,7 +8,7 @@ from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_name, model_saving_name, checkpoint=None):
 
-  #model.train()
+  model.train()
 
   epoch = 0
   train_loss = 0.0
@@ -69,7 +69,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
       if total_steps % 256 == 0:
         top1, top5, val_loss = eval(model, dev_loader, encoder)
-        #model.train()
+        model.train()
 
         top1_avg = top1.get_average_results_nouns()
         top5_avg = top5.get_average_results_nouns()
@@ -106,7 +106,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
     scheduler.step()
 
 def eval(model, dev_loader, encoder, write_to_file = False):
-  #model.eval()
+  model.eval()
 
   print ('=> evaluating model...')
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3, write_to_file)
