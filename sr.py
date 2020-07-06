@@ -16,7 +16,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   print_flag = False
   best_score = float_info.min
 
-  print("Let's use", torch.cuda.device_count(), "GPUs!")
+  print('Using', torch.cuda.device_count(), 'GPUs!')
   model = torch.nn.DataParallel(model)
   
   if checkpoint is not None:
@@ -58,11 +58,10 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       if total_steps % 16 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
-        print("Epoch-{}, total_steps: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
-          .format(e, total_steps,
-          utils.format_dict(top1_a, "{:.2f}", "1-"),
-          utils.format_dict(top5_a,"{:.2f}","5-"),
-          loss.item(), train_loss/16)
+        print('Epoch-{}, loss = {:.2f}, {}, {}'
+          .format(e, loss.item(),
+          utils.format_dict(top1_a, '{:.2f}', '1-'),
+          utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
         train_loss = 0.0
 
@@ -74,11 +73,11 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         top1_avg = top1.get_average_results_nouns()
         top5_avg = top5.get_average_results_nouns()
 
-        avg_score = top1_avg["verb"] + top1_avg["value"] + top1_avg["value-all"] + top5_avg["verb"] + \
-                    top5_avg["value"] + top5_avg["value-all"] + top5_avg["value*"] + top5_avg["value-all*"]
+        avg_score = top1_avg['verb'] + top1_avg['value'] + top1_avg['value-all'] + top5_avg['verb'] + \
+                    top5_avg['value'] + top5_avg['value-all'] + top5_avg['value*'] + top5_avg['value-all*']
         avg_score /= 8
 
-        print ('Dev average: {:.2f} {} {}'.format(avg_score*100,
+        print ('=> Dev average: {:.2f} {} {}'.format(avg_score*100,
                                         utils.format_dict(top1_avg,'{:.2f}', '1-'),
                                         utils.format_dict(top5_avg, '{:.2f}', '5-')))
         
@@ -95,10 +94,10 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
             }
           
           torch.save( checkpoint, 'trained_models' +
-                      "/{}_{}.model".format( model_name, model_saving_name)
+                      '/{}_{}.model'.format( model_name, model_saving_name)
                     )
 
-          print ('New best model saved.')
+          print ('**** New best model saved ****')
 
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
@@ -130,9 +129,9 @@ def eval(model, dev_loader, encoder, write_to_file = False):
 
   return top1, top5, 0
 
-if __name__ == "__main__":
+if __name__ == '__main__':
   import argparse
-  parser = argparse.ArgumentParser(description="Situation recognition GGNN. Training, evaluation and prediction.")
+  parser = argparse.ArgumentParser(description='Situation recognition GGNN. Training, evaluation and prediction.')
   parser.add_argument('--resume_training', action='store_true', help='Resume training from the model [resume_model]')
   parser.add_argument('--resume_model', type=str, default='', help='The model we resume')
   parser.add_argument('--evaluate', action='store_true', help='Only use the testing mode')
@@ -209,8 +208,8 @@ if __name__ == "__main__":
     top1_avg = top1.get_average_results_nouns()
     top5_avg = top5.get_average_results_nouns()
 
-    avg_score = top1_avg["verb"] + top1_avg["value"] + top1_avg["value-all"] + top5_avg["verb"] + \
-                top5_avg["value"] + top5_avg["value-all"] + top5_avg["value*"] + top5_avg["value-all*"]
+    avg_score = top1_avg['verb'] + top1_avg['value'] + top1_avg['value-all'] + top5_avg['verb'] + \
+                top5_avg['value'] + top5_avg['value-all'] + top5_avg['value*'] + top5_avg['value-all*']
     avg_score /= 8
 
     print('Dev average :{:.2f} {} {}'
@@ -225,8 +224,8 @@ if __name__ == "__main__":
     top1_avg = top1.get_average_results_nouns()
     top5_avg = top5.get_average_results_nouns()
 
-    avg_score = top1_avg["verb"] + top1_avg["value"] + top1_avg["value-all"] + top5_avg["verb"] + \
-                top5_avg["value"] + top5_avg["value-all"] + top5_avg["value*"] + top5_avg["value-all*"]
+    avg_score = top1_avg['verb'] + top1_avg['value'] + top1_avg['value-all'] + top5_avg['verb'] + \
+                top5_avg['value'] + top5_avg['value-all'] + top5_avg['value*'] + top5_avg['value-all*']
     avg_score /= 8
 
     print ('Test average :{:.2f} {} {}'
