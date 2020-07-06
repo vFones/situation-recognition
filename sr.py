@@ -11,7 +11,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   #model.train()
 
   epoch = 0
-  train_loss = 0
+  train_loss = 0.0
   total_steps = 0
   print_flag = False
   best_score = float_info.min
@@ -22,11 +22,6 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   if checkpoint is not None:
     epoch = checkpoint['epoch']
     best_score = checkpoint['best_score']
-    train_loss = checkpoint['train_loss']
-    total_steps = checkpoint['total_steps']
-    model = checkpoint['model']
-    optimizer = checkpoint['optimizer']
-    scheduler = checkpoint['lr_sched']
     model.module.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -35,40 +30,41 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
   for e in range(epoch, max_epoch):
-    print('Epoch-{0} lr: {1}'.format(e, optimizer.param_groups[0]['lr']))
-
+    print('Epoch-{}, lr: {}'.format(e, optimizer.param_groups[0]['lr']))
+    
     for i, (_, img, verb, labels) in enumerate(train_loader):
       total_steps += 1
 
       img = torch.autograd.Variable(img.cuda())
       verb = torch.autograd.Variable(verb.cuda())
       labels = torch.autograd.Variable(labels.cuda())
-        
+      
+      optimizer.zero_grad()
+
       role_predict = model(img, verb)
 
       loss = model.module.calculate_loss(verb, role_predict, labels)
       loss.backward()
 
-      torch.nn.utils.clip_grad_norm_(model.parameters(), 0.25)
+      torch.nn.utils.clip_grad_value_(model.parameters(), 1)
 
       optimizer.step()
-      optimizer.zero_grad()
 
       train_loss += loss.item()
 
       top1.add_point_noun(verb, role_predict, labels)
       top5.add_point_noun(verb, role_predict, labels)
 
-      if total_steps % 256 == 0:
+      if total_steps % 16 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
-        print("Epoch-{} total_steps: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
+        print("Epoch-{}, total_steps: {}, {} , {}, loss = {:.2f}, avg loss = {:.2f}"
           .format(e, total_steps,
           utils.format_dict(top1_a, "{:.2f}", "1-"),
           utils.format_dict(top5_a,"{:.2f}","5-"),
-          loss.item(), train_loss/len(train_loader)
-          )
+          loss.item(), train_loss/16)
         )
+        train_loss = 0.0
 
 
       if total_steps % 256 == 0:
@@ -93,28 +89,21 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
           checkpoint = { 
             'epoch': e+1,
             'best_score': best_score,
-            'train_loss': train_loss,
-            'total_steps': total_steps,
-            'model': model,
-            'optimizer': optimizer,
-            'lr_sched': scheduler,
             'model_state_dict': model.module.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
             'scheduler_state_dict': scheduler.state_dict()
             }
           
-          torch.save(checkpoint, 'trained_models' + "/{}_{}.model".format( model_name, model_saving_name))
+          torch.save( checkpoint, 'trained_models' +
+                      "/{}_{}.model".format( model_name, model_saving_name)
+                    )
 
           print ('New best model saved.')
 
-        #print('current train loss', train_loss/len(train_loader))
-        #train_loss = 0
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
-      
-    #del role_predict, loss, img, verb, labels
-    
-  scheduler.step()
+          
+    scheduler.step()
 
 def eval(model, dev_loader, encoder, write_to_file = False):
   #model.eval()
@@ -138,8 +127,6 @@ def eval(model, dev_loader, encoder, write_to_file = False):
       else:
         top1.add_point_noun(verb, role_predict, labels)
         top5.add_point_noun(verb, role_predict, labels)
-
-      #del role_predict, img, verb, labels
 
   return top1, top5, 0
 
