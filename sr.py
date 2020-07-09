@@ -35,9 +35,9 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
     for i, (_, img, verb, labels) in enumerate(train_loader):
       total_steps += 1
 
-      img = torch.autograd.Variable(img.cuda())
-      verb = torch.autograd.Variable(verb.cuda())
-      labels = torch.autograd.Variable(labels.cuda())
+      img = img.cuda()
+      verb = verb.cuda()
+      labels = labels.cuda()
       
       optimizer.zero_grad()
 
@@ -114,9 +114,9 @@ def eval(model, dev_loader, encoder, write_to_file = False):
 
     for i, (img_id, img, verb, labels) in enumerate(dev_loader):
 
-      img = torch.autograd.Variable(img.cuda())
-      verb = torch.autograd.Variable(verb.cuda())
-      labels = torch.autograd.Variable(labels.cuda())
+      img = img.cuda()
+      verb = verb.cuda()
+      labels = labels.cuda()
 
       role_predict = model(img, verb)
 
@@ -144,6 +144,7 @@ if __name__ == '__main__':
   parser.add_argument('--test_file', type=str, default='test.json', help='test json file')
   
   parser.add_argument('--epochs', type=int, default=500)
+  parser.add_argument('--decay', type=float, default=0.85)
   parser.add_argument('--seed', type=int, default=1111, help='random seed')
 
   args = parser.parse_args()
@@ -192,15 +193,8 @@ if __name__ == '__main__':
     model_name = 'train_full'
     utils.set_trainable(model, True)
     optimizer = torch.optim.RMSprop(model.parameters(), alpha=0.9, lr=1e-3)
-    ''' [
-        {'params': model.convnet.parameters(), 'lr': 5e-5},
-        {'params': model.role_emb.parameters()},
-        {'params': model.verb_emb.parameters()},
-        {'params': model.ggnn.parameters()},
-        {'params': model.classifier.parameters()}
-    ], lr=1e-3) '''
-
-  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10 ,gamma=0.85)
+    
+  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10 ,gamma=args.decay)
   
   if args.evaluate:
     top1, top5, val_loss = eval(model, dev_loader, encoder)
