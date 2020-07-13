@@ -82,10 +82,9 @@ class GGNN_Baseline(nn.Module):
         self.classifier = classifier
         self.encoder = encoder
 
-    def forward(self, v_org, gt_verb):
+    def forward(self, img, gt_verb):
 
-        img_features = self.convnet(v_org)
-
+        img_features = self.convnet(img)
         batch_size = img_features.size(0)
 
         role_idx = self.encoder.get_role_ids_batch(gt_verb)

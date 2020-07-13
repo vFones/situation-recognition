@@ -7,7 +7,7 @@ import json
 
 class imsitu_encoder():
     def __init__(self, train_set):
-        # json structure -> {<img_id>:{frames:[{<role1>:<label1>, ...},{}...], verb:<verb1>}}
+        # json structure -> {<img_name>:{frames:[{<role1>:<label1>, ...},{}...], verb:<verb1>}}
         print('imsitu encoder initialization started.')
         self.verb_list = []
         self.role_list = []
@@ -23,7 +23,7 @@ class imsitu_encoder():
         self.agent_roles = ['agent', 'individuals','brancher', 'agenttype', 'gatherers', 'agents', 'teacher', 'traveler', 'mourner',
                             'seller', 'boaters', 'blocker', 'farmer']
 
-        # imag preprocess
+        # image preprocessing used for images in pretrained models in pytorch. See docs
         self.normalize = tv.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
         self.train_transform = tv.transforms.Compose([
@@ -41,15 +41,20 @@ class imsitu_encoder():
             self.normalize,
         ])
 
-
-        for img_id in train_set:
-            img = train_set[img_id]
-            current_verb = img['verb']
+        # for every images in trainset
+        for img in train_set:
+            # get img.jpg filename
+            annotations = train_set[img]
+            #get current verb associated with annotations
+            current_verb = annotations['verb']
+            # if verb is not in verb_list
             if current_verb not in self.verb_list:
-                self.verb_list.append(current_verb)
+                self.verb_list.append(current_verb) #append it
                 self.verb2_role_dict[current_verb] = []
+                #create a dictionary for that verb
 
-            roles = img['frames'][0].keys()
+
+            roles = annotations['frames'][0].keys()
             has_agent = False
             has_place = False
             agent_role = None
@@ -65,14 +70,19 @@ class imsitu_encoder():
                         has_agent = True
                         break
 
-            for frame in img['frames']:
-                for role,label in frame.items():
+
+            for annotation in annotations['frames']:
+                for role, label in annotation.items():
+                    #add to roles list
                     if role not in self.role_list:
                         self.role_list.append(role)
+                    #add role in a list containing all role associated with verb
                     if role not in self.verb2_role_dict[current_verb]:
                         self.verb2_role_dict[current_verb].append(role)
+                    #upgrade number of all role associated with verb
                     if len(self.verb2_role_dict[current_verb]) > self.max_role_count:
                         self.max_role_count = len(self.verb2_role_dict[current_verb])
+                    #add label to labels list
                     if label not in self.label_list:
                         self.label_list.append(label)
                     if label not in self.agent_label_list:
@@ -89,26 +99,29 @@ class imsitu_encoder():
               '\n\t max role count:', self.max_role_count)
 
 
-        verb2role_list = []
+        # grep roles list for a verb
+        roles_to_verb_list = []
         for verb_id in range(len(self.verb_list)):
             current_role_list = self.verb2_role_dict[self.verb_list[verb_id]]
 
-            role_verb = []
+            # grep role_id from current role list assicuated with verb
+            role_verb = []            
             for role in current_role_list:
                 role_id = self.role_list.index(role)
                 role_verb.append(role_id)
-
+            
+            
             padding_count = self.max_role_count - len(current_role_list)
 
+            #use padding count to create a generic tensor
             for i in range(padding_count):
                 role_verb.append(len(self.role_list))
 
-            verb2role_list.append(torch.tensor(role_verb))
+            roles_to_verb_list.append(torch.tensor(role_verb))
 
-        self.verb2role_list = torch.stack(verb2role_list)
+        self.roles_to_verb_tensor_list = torch.stack(roles_to_verb_list)
         self.verb2role_encoding = self.get_verb2role_encoding()
         self.verb2role_oh_encoding = self.get_verb2role_oh_encoding()
-
 
     def get_verb2role_encoding(self):
         verb2role_embedding_list = []
@@ -163,12 +176,6 @@ class imsitu_encoder():
 
         return role_verb
 
-    def save_encoder(self):
-        return None
-
-    def load_encoder(self):
-        return None
-
     def get_max_role_count(self):
         return self.max_role_count
 
@@ -185,45 +192,25 @@ class imsitu_encoder():
         return len(self.verb2_role_dict[self.verb_list[verb_id]])
 
     def encode(self, item):
+        '''encode all '''
         verb = self.verb_list.index(item['verb'])
         labels = self.get_label_ids(item['verb'], item['frames'])
 
         return verb, labels
 
-    def encode_with_impact(self, item):
-        verb = self.verb_list.index(item['verb'])
-        labels, impact = self.get_label_ids_with_impact(item['verb'], item['frames'])
-
-        return verb, labels, impact
-
-    def encode_agent(self, item):
-        labels = self.get_agent_label_ids(item['verb'], item['frames'])
-
-        return labels
-
-    def encode_place(self, item):
-        labels = self.get_place_label_ids(item['verb'], item['frames'])
-
-        return labels
-
-    def encode_verb(self, item):
-        verb = self.verb_list.index(item['verb'])
-
-        return verb
-
     def get_role_ids(self, verb_id):
-
-        return self.verb2role_list[verb_id]
+        '''return list of all tensors roles associated with verb'''
+        return self.roles_to_verb_tensor_list[verb_id]
 
     def get_role_ids_batch(self, verbs):
+        '''return all roles associated with verbs in a batch'''
         role_batch_list = []
-        q_len = []
 
         for verb_id in verbs:
             role_ids = self.get_role_ids(verb_id)
             role_batch_list.append(role_ids)
 
-        return torch.stack(role_batch_list,0)
+        return torch.stack(role_batch_list)
 
     def get_agent_place_ids_batch(self, batch_size):
         role_batch_list = []
