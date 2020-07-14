@@ -26,20 +26,19 @@ class vgg16_modified(nn.Module):
     return y
 
 class resnext_modified(nn.Module):
-  features = None
   def __init__(self):
     super(resnext_modified, self).__init__()
     self.resnext = tv.models.resnext101_32x8d(pretrained=True)
-    self.resnext.fc.register_forward_hook(self.res_hook)
+    self.features = None
     self.resize = nn.Sequential(
       nn.Linear(2048, 1024)
     )
-
-  def res_hook(self, model, input, output):
-    self.features = input
-
+    def res_hook(_, input, __):
+      self.features = input
+    self.resnext.fc.register_forward_hook(res_hook)
+    
   def forward(self, x):
-    self.resnext.forward(x)
+    self.resnext(x)
     return self.resize(self.features[0])
 
 class GGNN(nn.Module):
