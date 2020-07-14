@@ -2,6 +2,7 @@ import torch
 import json
 import os
 from sys import float_info
+import matplotlib.pyplot as plt
 
 import model
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
@@ -10,7 +11,10 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
   model.train()
 
+  x = []
+  y = []
   epoch = 0
+  epoch_loss = 0.0
   train_loss = 0.0
   total_steps = 0
   print_flag = False
@@ -30,7 +34,11 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
   for e in range(epoch, max_epoch):
-    print('Epoch-{}, lr: {}'.format(e, optimizer.param_groups[0]['lr']))
+    print('- Starting epoch-{}, lr: {}'.format(
+        e, 
+        optimizer.param_groups[0]['lr']
+      )
+    )
     
     for i, (_, img, verb, labels) in enumerate(train_loader):
       total_steps += 1
@@ -51,6 +59,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       optimizer.step()
 
       train_loss += loss.item()
+      epoch_loss += role_predict.shape[0] * loss.item()
 
       top1.add_point_noun(verb, role_predict, labels)
       top5.add_point_noun(verb, role_predict, labels)
@@ -58,8 +67,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       if total_steps % 16 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
-        print('Epoch-{}, loss = {:.2f}, {}, {}'
-          .format(e, loss.item(),
+        print('Epoch-{}, log_loss = {:.2f}, train_loss = {}, {}, {}'
+          .format(e, loss.item(), train_loss / 16,
           utils.format_dict(top1_a, '{:.2f}', '1-'),
           utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
@@ -77,7 +86,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
                     top5_avg['value'] + top5_avg['value-all'] + top5_avg['value*'] + top5_avg['value-all*']
         avg_score /= 8
 
-        print ('=> Dev average: {:.2f} {} {}'.format(avg_score*100,
+        print ('=> Dev average: {:.2f}, {}, {}'.format(avg_score*100,
                                         utils.format_dict(top1_avg,'{:.2f}', '1-'),
                                         utils.format_dict(top5_avg, '{:.2f}', '5-')))
         
@@ -101,9 +110,14 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
-          
-    scheduler.step()
+    
+    y.append(epoch_loss/len(train_loader))
+    x.append(e+1)
+    plt.plot(x, y)
+    plt.savefig('loss.png')
 
+    scheduler.step()
+    
 def eval(model, dev_loader, encoder, write_to_file = False):
   model.eval()
 
@@ -232,19 +246,3 @@ if __name__ == '__main__':
     print('Model training started!')
     train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, model_name, args.model_saving_name,
     checkpoint=checkpoint)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

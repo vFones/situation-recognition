@@ -25,6 +25,22 @@ class vgg16_modified(nn.Module):
     y = self.resize(self.vgg_classifier(features.view(-1, 512*7*7)))
     return y
 
+class resnext_modified(nn.Module):
+  features = None
+  def __init__(self):
+    super(resnext_modified, self).__init__()
+    self.resnext = tv.models.resnext101_32x8d(pretrained=True)
+    self.resnext.fc.register_forward_hook(self.res_hook)
+    self.resize = nn.Sequential(
+      nn.Linear(2048, 1024)
+    )
+
+  def res_hook(self, model, input, output):
+    self.features = input
+
+  def forward(self, x):
+    self.resnext.forward(x)
+    return self.resize(self.features[0])
 
 class GGNN(nn.Module):
   """
@@ -131,12 +147,11 @@ class GGNN_Baseline(nn.Module):
     role_label_pred = role_label_pred.transpose(0,1)
     role_label_pred = role_label_pred.contiguous().view(-1, role_label_pred.size(-1))
 
-    #return loss
     return criterion(role_label_pred, gt_label_turned.squeeze(1)) * 3
 
 def build_ggnn_baseline(n_roles, n_verbs, num_ans_classes, encoder):
 
-  covnet = vgg16_modified()
+  covnet = resnext_modified()
   role_emb = nn.Embedding(n_roles+1, 1024, padding_idx=n_roles)
   verb_emb = nn.Embedding(n_verbs, 1024)
   ggnn = GGNN(n_node=encoder.max_role_count)
