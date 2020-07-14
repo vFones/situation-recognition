@@ -148,11 +148,14 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Situation recognition GGNN. Training, evaluation and prediction.')
   parser.add_argument('--resume_training', action='store_true', help='Resume training from the model [resume_model]')
   parser.add_argument('--resume_model', type=str, default='', help='The model we resume')
+  
   parser.add_argument('--evaluate', action='store_true', help='Only use the testing mode')
   parser.add_argument('--test', action='store_true', help='Only use the testing mode')
   parser.add_argument('--model_saving_name', type=str, help='saving name of the outpul model')
+
   parser.add_argument('--dataset_folder', type=str, default='./imSitu', help='Location of annotations')
   parser.add_argument('--imgset_dir', type=str, default='./resized_256', help='Location of original images')
+
   parser.add_argument('--train_file', type=str, default='train.json', help='Train json file')
   parser.add_argument('--dev_file', type=str, default='dev.json', help='Dev json file')
   parser.add_argument('--test_file', type=str, default='test.json', help='test json file')
@@ -166,7 +169,14 @@ if __name__ == '__main__':
   n_epoch = args.epochs
 
   train_set = json.load(open(args.dataset_folder + '/' + args.train_file))
-  encoder = imsitu_encoder.imsitu_encoder(train_set)
+  
+  if not os.path.isfile('./encoder'):
+    encoder = imsitu_encoder.imsitu_encoder(train_set)
+    torch.save(encoder, 'encoder')
+  else:
+    print("Loaded already encoded file")
+    encoder = torch.load('encoder')
+
 
   model = model.build_ggnn_baseline(encoder.get_num_roles(), encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
   
@@ -185,7 +195,6 @@ if __name__ == '__main__':
     os.mkdir('trained_models')
   checkpoint = None
 
-    
   model.cuda()
   torch.manual_seed(args.seed)
   torch.backends.cudnn.benchmark = True
