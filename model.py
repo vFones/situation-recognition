@@ -8,142 +8,141 @@ import torch.nn as nn
 import torchvision as tv
 
 class vgg16_modified(nn.Module):
-    def __init__(self):
-        super(vgg16_modified, self).__init__()
-        vgg = tv.models.vgg16_bn(pretrained=True)
-        self.vgg_features = vgg.features
-        self.out_features = vgg.classifier[6].in_features
-        features = list(vgg.classifier.children())[:-1] # Remove last layer
-        self.vgg_classifier = nn.Sequential(*features) # Replace the model classifier
+  def __init__(self):
+    super(vgg16_modified, self).__init__()
+    vgg = tv.models.vgg16_bn(pretrained=True)
+    self.vgg_features = vgg.features
+    self.out_features = vgg.classifier[6].in_features
+    features = list(vgg.classifier.children())[:-1] # Remove last layer
+    self.vgg_classifier = nn.Sequential(*features) # Replace the model classifier
 
-        self.resize = nn.Sequential(
-            nn.Linear(4096, 1024)
-        )
+    self.resize = nn.Sequential(
+      nn.Linear(4096, 1024)
+    )
 
-    def forward(self,x):
-        features = self.vgg_features(x)
-        y = self.resize(self.vgg_classifier(features.view(-1, 512*7*7)))
-        return y
+  def forward(self,x):
+    features = self.vgg_features(x)
+    y = self.resize(self.vgg_classifier(features.view(-1, 512*7*7)))
+    return y
 
 
 class GGNN(nn.Module):
-    """
-    Gated Graph Sequence Neural Networks (GGNN)
-    Mode: SelectNode
-    Implementation based on https://arxiv.org/abs/1511.05493
-    """
-    def __init__(self, n_node):
-        super(GGNN, self).__init__()
+  """
+  Gated Graph Sequence Neural Networks (GGNN)
+  Mode: SelectNode
+  Implementation based on https://arxiv.org/abs/1511.05493
+  """
+  def __init__(self, n_node):
+    super(GGNN, self).__init__()
 
-        self.n_node = n_node
+    self.n_node = n_node
 
-        #neighbour projection
-        self.W_p = nn.Linear(1024, 1024)
-        #weights of update gate
-        self.W_z = nn.Linear(1024, 1024)
-        self.U_z = nn.Linear(1024, 1024)
-        #weights of reset gate
-        self.W_r = nn.Linear(1024, 1024)
-        self.U_r = nn.Linear(1024, 1024)
-        #weights of transform
-        self.W_h = nn.Linear(1024, 1024)
-        self.U_h = nn.Linear(1024, 1024)
+    #neighbour projection
+    self.W_p = nn.Linear(1024, 1024)
+    #weights of update gate
+    self.W_z = nn.Linear(1024, 1024)
+    self.U_z = nn.Linear(1024, 1024)
+    #weights of reset gate
+    self.W_r = nn.Linear(1024, 1024)
+    self.U_r = nn.Linear(1024, 1024)
+    #weights of transform
+    self.W_h = nn.Linear(1024, 1024)
+    self.U_h = nn.Linear(1024, 1024)
 
-    def forward(self, init_node, mask):
+  def forward(self, init_node, mask):
 
-        hidden_state = init_node
+    hidden_state = init_node
+    for t in range(4):
+      # calculating neighbour info
+      neighbours = hidden_state.contiguous().view(mask.size(0), self.n_node, -1)
+      neighbours = neighbours.expand(self.n_node, neighbours.size(0), neighbours.size(1), neighbours.size(2))
+      neighbours = neighbours.transpose(0,1)
 
-        for t in range(4):
-            # calculating neighbour info
-            neighbours = hidden_state.contiguous().view(mask.size(0), self.n_node, -1)
-            neighbours = neighbours.expand(self.n_node, neighbours.size(0), neighbours.size(1), neighbours.size(2))
-            neighbours = neighbours.transpose(0,1)
+      neighbours = neighbours * mask.unsqueeze(-1)
+      neighbours = self.W_p(neighbours)
+      neighbours = torch.sum(neighbours, 2)
+      neighbours = neighbours.contiguous().view(mask.size(0)*self.n_node, -1)
 
-            neighbours = neighbours * mask.unsqueeze(-1)
-            neighbours = self.W_p(neighbours)
-            neighbours = torch.sum(neighbours, 2)
-            neighbours = neighbours.contiguous().view(mask.size(0)*self.n_node, -1)
+      #applying gating
+      z_t = torch.sigmoid(self.W_z(neighbours) + self.U_z(hidden_state))
+      r_t = torch.sigmoid(self.W_r(neighbours) + self.U_r(hidden_state))
+      h_hat_t = torch.tanh(self.W_h(neighbours) + self.U_h(r_t * hidden_state))
+      hidden_state = (1 - z_t) * hidden_state + z_t * h_hat_t
 
-            #applying gating
-            z_t = torch.sigmoid(self.W_z(neighbours) + self.U_z(hidden_state))
-            r_t = torch.sigmoid(self.W_r(neighbours) + self.U_r(hidden_state))
-            h_hat_t = torch.tanh(self.W_h(neighbours) + self.U_h(r_t * hidden_state))
-            hidden_state = (1 - z_t) * hidden_state + z_t * h_hat_t
-
-        return hidden_state
+    return hidden_state
 
 class GGNN_Baseline(nn.Module):
-    def __init__(self, convnet, role_emb, verb_emb, ggnn, classifier, encoder):
-        super(GGNN_Baseline, self).__init__()
-        self.convnet = convnet
-        self.role_emb = role_emb
-        self.verb_emb = verb_emb
-        self.ggnn = ggnn
-        self.classifier = classifier
-        self.encoder = encoder
+  def __init__(self, convnet, role_emb, verb_emb, ggnn, classifier, encoder):
+    super(GGNN_Baseline, self).__init__()
+    self.convnet = convnet
+    self.role_emb = role_emb
+    self.verb_emb = verb_emb
+    self.ggnn = ggnn
+    self.classifier = classifier
+    self.encoder = encoder
 
-    def forward(self, img, gt_verb):
+  def forward(self, img, gt_verb):
 
-        img_features = self.convnet(img)
-        batch_size = img_features.size(0)
+    img_features = self.convnet(img)
+    batch_size = img_features.size(0)
 
-        role_idx = self.encoder.get_role_ids_batch(gt_verb)
+    role_idx = self.encoder.get_role_ids_batch(gt_verb)
 
-        role_idx = role_idx.to(torch.device('cuda'))
+    role_idx = role_idx.to(torch.device('cuda'))
 
-        # repeat single image for max role count a frame can have
-        img_features = img_features.expand(self.encoder.max_role_count, img_features.size(0), img_features.size(1))
+    # repeat single image for max role count a frame can have
+    img_features = img_features.expand(self.encoder.max_role_count, img_features.size(0), img_features.size(1))
 
-        img_features = img_features.transpose(0,1)
-        img_features = img_features.contiguous().view(batch_size * self.encoder.max_role_count, -1)
+    img_features = img_features.transpose(0,1)
+    img_features = img_features.contiguous().view(batch_size * self.encoder.max_role_count, -1)
 
-        verb_embd = self.verb_emb(gt_verb)
-        role_embd = self.role_emb(role_idx)
+    verb_embd = self.verb_emb(gt_verb)
+    role_embd = self.role_emb(role_idx)
 
-        role_embd = role_embd.view(batch_size * self.encoder.max_role_count, -1)
+    role_embd = role_embd.view(batch_size * self.encoder.max_role_count, -1)
 
-        verb_embed_expand = verb_embd.expand(self.encoder.max_role_count, verb_embd.size(0), verb_embd.size(1))
-        verb_embed_expand = verb_embed_expand.transpose(0,1)
-        verb_embed_expand = verb_embed_expand.contiguous().view(batch_size * self.encoder.max_role_count, -1)
+    verb_embed_expand = verb_embd.expand(self.encoder.max_role_count, verb_embd.size(0), verb_embd.size(1))
+    verb_embed_expand = verb_embed_expand.transpose(0,1)
+    verb_embed_expand = verb_embed_expand.contiguous().view(batch_size * self.encoder.max_role_count, -1)
 
-        input2ggnn = img_features * role_embd * verb_embed_expand
+    input2ggnn = img_features * role_embd * verb_embed_expand
 
-        #mask out non exisiting roles from max role count a frame can have
-        mask = self.encoder.get_adj_matrix_noself(gt_verb)
-        mask = mask.to(torch.device('cuda'))
+    #mask out non exisiting roles from max role count a frame can have
+    mask = self.encoder.get_adj_matrix_noself(gt_verb)
+    mask = mask.to(torch.device('cuda'))
 
-        out = self.ggnn(input2ggnn, mask)
+    out = self.ggnn(input2ggnn, mask)
 
-        logits = self.classifier(out)
+    logits = self.classifier(out)
 
-        # return role_label_pred
-        return logits.contiguous().view(batch_size, self.encoder.max_role_count, -1)
+    # return role_label_pred
+    return logits.contiguous().view(batch_size, self.encoder.max_role_count, -1)
 
 
-    def calculate_loss(self, gt_verbs, role_label_pred, gt_labels):
+  def calculate_loss(self, gt_verbs, role_label_pred, gt_labels):
 
-        batch_size = role_label_pred.size()[0]
-        criterion = nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
+    batch_size = role_label_pred.size()[0]
+    criterion = nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
 
-        gt_label_turned = gt_labels.transpose(1,2).contiguous().view(batch_size* self.encoder.max_role_count*3, -1)
+    gt_label_turned = gt_labels.transpose(1,2).contiguous().view(batch_size* self.encoder.max_role_count*3, -1)
 
-        role_label_pred = role_label_pred.contiguous().view(batch_size* self.encoder.max_role_count, -1)
-        role_label_pred = role_label_pred.expand(3, role_label_pred.size(0), role_label_pred.size(1))
-        role_label_pred = role_label_pred.transpose(0,1)
-        role_label_pred = role_label_pred.contiguous().view(-1, role_label_pred.size(-1))
+    role_label_pred = role_label_pred.contiguous().view(batch_size* self.encoder.max_role_count, -1)
+    role_label_pred = role_label_pred.expand(3, role_label_pred.size(0), role_label_pred.size(1))
+    role_label_pred = role_label_pred.transpose(0,1)
+    role_label_pred = role_label_pred.contiguous().view(-1, role_label_pred.size(-1))
 
-        #return loss
-        return criterion(role_label_pred, gt_label_turned.squeeze(1)) * 3
+    #return loss
+    return criterion(role_label_pred, gt_label_turned.squeeze(1)) * 3
 
 def build_ggnn_baseline(n_roles, n_verbs, num_ans_classes, encoder):
 
-    covnet = vgg16_modified()
-    role_emb = nn.Embedding(n_roles+1, 1024, padding_idx=n_roles)
-    verb_emb = nn.Embedding(n_verbs, 1024)
-    ggnn = GGNN(n_node=encoder.max_role_count)
-    classifier = nn.Sequential(
-        nn.Dropout(0.5),
-        nn.Linear(1024, num_ans_classes)
-    )
+  covnet = vgg16_modified()
+  role_emb = nn.Embedding(n_roles+1, 1024, padding_idx=n_roles)
+  verb_emb = nn.Embedding(n_verbs, 1024)
+  ggnn = GGNN(n_node=encoder.max_role_count)
+  classifier = nn.Sequential(
+    nn.Dropout(0.5),
+    nn.Linear(1024, num_ans_classes)
+  )
 
-    return GGNN_Baseline(covnet, role_emb, verb_emb, ggnn, classifier, encoder)
+  return GGNN_Baseline(covnet, role_emb, verb_emb, ggnn, classifier, encoder)
