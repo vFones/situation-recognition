@@ -11,8 +11,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
   model.train()
 
-  x = []
-  y = []
+  epochlosses = []
+  losses = []
   epoch = 0
   epoch_loss = 0.0
   train_loss = 0.0
@@ -34,12 +34,13 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
   for e in range(epoch, max_epoch):
-    print('- Starting epoch-{}, lr: {}'.format(
+    print('Epoch-{}, lr: {}'.format(
         e, 
         optimizer.param_groups[0]['lr']
       )
     )
-    
+    epoch_loss = 0.0
+    train_loss = 0.0
     for i, (_, img, verb, labels) in enumerate(train_loader):
       total_steps += 1
 
@@ -67,12 +68,15 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       if total_steps % 16 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
-        print('Epoch-{}, log_loss = {:.3f}, train_loss = {:.3f}, {}, {}'
-          .format(e, loss.item(), train_loss / 16,
+        print('Epoch-{}, loss.item() = {:.2f}, train_loss/16 = {:.2f}, {}, {}'
+          .format(e, loss.item(), (train_loss / 16),
           utils.format_dict(top1_a, '{:.2f}', '1-'),
           utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
         train_loss = 0.0
+        losses.append(loss.item())
+        plt.plot(losses)
+        plt.savefig('img/losses.png')
 
 
       if total_steps % 256 == 0:
@@ -111,11 +115,10 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
     
-    y.append(epoch_loss/len(train_loader))
-    x.append(e+1)
-    plt.plot(x, y)
-    plt.savefig('loss.png')
-    print("Epoch {} loss {:.3f}", e, epoch_loss/len(train_loader))
+    epochlosses.append(epoch_loss/len(train_loader))
+    plt.plot(epochlosses)
+    plt.savefig('img/epochlosses.png')
+    print("Epoch-{} loss {:.3f}".format(e, epoch_loss/len(train_loader)) )
     scheduler.step()
     
 def eval(model, dev_loader, encoder, write_to_file = False):
