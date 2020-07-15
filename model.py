@@ -26,41 +26,35 @@ class vgg16_modified(nn.Module):
     return y
 
 class resnext_modified(nn.Module):
-  features=None
   def __init__(self):
     super(resnext_modified, self).__init__()
     self.resnext = tv.models.resnext101_32x8d(pretrained=True)
-    def hook_fn(model, input, output):
-      self.features = input
-    
-    self.hook = self.resnext.fc.register_forward_hook(hook_fn)
-    
-  def forward(self, x):
-    self.resnext(x)
-    return self.features[0]
+    self.resnext.fc = nn.Identity()
 
+  def forward(self, x):
+    return self.resnext(x)
+    
 class GGNN(nn.Module):
   """
   Gated Graph Sequence Neural Networks (GGNN)
   Mode: SelectNode
   Implementation based on https://arxiv.org/abs/1511.05493
   """
-  def __init__(self, n_node):
+  def __init__(self, n_node, layersize):
     super(GGNN, self).__init__()
 
     self.n_node = n_node
-
     #neighbour projection
-    self.W_p = nn.Linear(1024, 1024)
+    self.W_p = nn.Linear(layersize, layersize)
     #weights of update gate
-    self.W_z = nn.Linear(1024, 1024)
-    self.U_z = nn.Linear(1024, 1024)
+    self.W_z = nn.Linear(layersize, layersize)
+    self.U_z = nn.Linear(layersize, layersize)
     #weights of reset gate
-    self.W_r = nn.Linear(1024, 1024)
-    self.U_r = nn.Linear(1024, 1024)
+    self.W_r = nn.Linear(layersize, layersize)
+    self.U_r = nn.Linear(layersize, layersize)
     #weights of transform
-    self.W_h = nn.Linear(1024, 1024)
-    self.U_h = nn.Linear(1024, 1024)
+    self.W_h = nn.Linear(layersize, layersize)
+    self.U_h = nn.Linear(layersize, layersize)
 
   def forward(self, init_node, mask):
 
@@ -147,14 +141,14 @@ class GGNN_Baseline(nn.Module):
     return criterion(role_label_pred, gt_label_turned.squeeze(1)) * 3
 
 def build_ggnn_baseline(n_roles, n_verbs, num_ans_classes, encoder):
-
+  layersize = 2048
   covnet = resnext_modified()
-  role_emb = nn.Embedding(n_roles+1, 1024, padding_idx=n_roles)
-  verb_emb = nn.Embedding(n_verbs, 1024)
-  ggnn = GGNN(n_node=encoder.max_role_count)
+  role_emb = nn.Embedding(n_roles+1, layersize, padding_idx=n_roles)
+  verb_emb = nn.Embedding(n_verbs, layersize)
+  ggnn = GGNN(n_node=encoder.max_role_count, layersize=layersize)
   classifier = nn.Sequential(
     nn.Dropout(0.5),
-    nn.Linear(1024, num_ans_classes)
+    nn.Linear(layersize, num_ans_classes)
   )
 
   return GGNN_Baseline(covnet, role_emb, verb_emb, ggnn, classifier, encoder)
