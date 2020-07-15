@@ -163,6 +163,7 @@ if __name__ == '__main__':
   
   parser.add_argument('--batch_size', type=int, default=64)
   parser.add_argument('--num_workers', type=int, default=8)
+  parser.add_argument('--epochs', type=int, default=500)
   parser.add_argument('--decay', type=float, default=0.85)
   parser.add_argument('--seed', type=int, default=1111, help='random seed')
 
