@@ -211,14 +211,14 @@ if __name__ == '__main__':
 
     utils.load_net(args.resume_model, [model])
     
-    optimizer = torch.optim.Adamax(model.parameters(), alpha=0.9, lr=1e-3)
+    optimizer = torch.optim.Adamax(model.parameters(), lr=1e-3)
     model_name = 'resume_all'
 
   else:
     print('Training from the scratch.')
     model_name = 'train_full'
     utils.set_trainable(model, True)
-    optimizer = torch.optim.Adamax(model.parameters(), alpha=0.9, lr=1e-3)
+    optimizer = torch.optim.Adamax(model.parameters(), lr=1e-3)
     
   scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20 ,gamma=args.decay)
   

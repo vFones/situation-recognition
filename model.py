@@ -28,7 +28,7 @@ class vgg16_modified(nn.Module):
 class resnext_modified(nn.Module):
   def __init__(self):
     super(resnext_modified, self).__init__()
-    self.resnext = tv.models.resnext101_32x8d(pretrained=True).cuda()
+    self.resnext = tv.models.resnext101_32x8d(pretrained=True)
     self.resnext.fc = nn.Identity()
 
   def forward(self, x):
@@ -87,14 +87,10 @@ class GGNN_Baseline(nn.Module):
     self.ggnn = ggnn
     self.classifier = classifier
     self.encoder = encoder
-    
-    self.resnext = tv.models.resnext101_32x8d(pretrained=True)
-    self.resnext.fc = nn.Identity()
 
 
   def forward(self, img, gt_verb):
     img_features = self.convnet(img)
-    #img_features = self.resnext(img)
 
     batch_size = img_features.size(0)
 
