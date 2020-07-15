@@ -29,17 +29,11 @@ class resnext_modified(nn.Module):
   def __init__(self):
     super(resnext_modified, self).__init__()
     self.resnext = tv.models.resnext101_32x8d(pretrained=True)
-    self.features = None
-    self.resize = nn.Sequential(
-      nn.Linear(2048, 1024)
-    )
-    def res_hook(_, input, __):
-      self.features = input
-    self.resnext.fc.register_forward_hook(res_hook)
+    self.features = self.resnext.fc.in_features
+    self.resnext.fc = nn.Linear(self.features, 1024)
     
   def forward(self, x):
-    self.resnext(x)
-    return self.resize(self.features[0])
+    return self.resnext(x)
 
 class GGNN(nn.Module):
   """
