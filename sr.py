@@ -67,7 +67,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       if total_steps % 16 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
-        print('Epoch-{}, log_loss = {:.2f}, train_loss = {}, {}, {}'
+        print('Epoch-{}, log_loss = {:.3f}, train_loss = {:.3f}, {}, {}'
           .format(e, loss.item(), train_loss / 16,
           utils.format_dict(top1_a, '{:.2f}', '1-'),
           utils.format_dict(top5_a,'{:.2f}', '5-'))
@@ -115,7 +115,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
     x.append(e+1)
     plt.plot(x, y)
     plt.savefig('loss.png')
-
+    print("Epoch {} loss {:.3f}", e, epoch_loss/len(train_loader))
     scheduler.step()
     
 def eval(model, dev_loader, encoder, write_to_file = False):
@@ -211,16 +211,16 @@ if __name__ == '__main__':
 
     utils.load_net(args.resume_model, [model])
     
-    optimizer = torch.optim.RMSprop(model.parameters(), alpha=0.9, lr=1e-3)
+    optimizer = torch.optim.Adamax(model.parameters(), alpha=0.9, lr=1e-3)
     model_name = 'resume_all'
 
   else:
     print('Training from the scratch.')
     model_name = 'train_full'
     utils.set_trainable(model, True)
-    optimizer = torch.optim.RMSprop(model.parameters(), alpha=0.9, lr=1e-3)
+    optimizer = torch.optim.Adamax(model.parameters(), alpha=0.9, lr=1e-3)
     
-  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=10 ,gamma=args.decay)
+  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20 ,gamma=args.decay)
   
   if args.evaluate:
     top1, top5, val_loss = eval(model, dev_loader, encoder)
