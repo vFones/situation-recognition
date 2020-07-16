@@ -15,7 +15,6 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   x_axis = [] 
   epoch = 0
   total_steps = 0
-  print_flag = False
   best_score = float_info.min
 
   print('Using', torch.cuda.device_count(), 'GPUs!')
@@ -23,6 +22,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   
   if checkpoint is not None:
     epoch = checkpoint['epoch']
+    losses = checkpoint['losses']
+    x_axis = checkpoint['x_axis']
     best_score = checkpoint['best_score']
     model.module.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -93,6 +94,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         if is_best:
           checkpoint = { 
             'epoch': e+1,
+            'losses': losses,
+            'x_axis': x_axis,
             'best_score': best_score,
             'model_state_dict': model.module.state_dict(),
             'optimizer_state_dict': optimizer.state_dict(),
