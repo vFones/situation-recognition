@@ -11,11 +11,9 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
   model.train()
 
-  epochlosses = []
   losses = []
+  x_axis = [] 
   epoch = 0
-  epoch_loss = 0.0
-  train_loss = 0.0
   total_steps = 0
   print_flag = False
   best_score = float_info.min
@@ -39,8 +37,6 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         optimizer.param_groups[0]['lr']
       )
     )
-    epoch_loss = 0.0
-    train_loss = 0.0
     for i, (_, img, verb, labels) in enumerate(train_loader):
       total_steps += 1
 
@@ -59,27 +55,25 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
       optimizer.step()
 
-      train_loss += loss.item()
-      epoch_loss += role_predict.shape[0] * loss.item()
-
       top1.add_point_noun(verb, role_predict, labels)
       top5.add_point_noun(verb, role_predict, labels)
 
-      if total_steps % 16 == 0:
+      if total_steps % 512 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
-        print('Epoch-{}, loss.item() = {:.2f}, train_loss/16 = {:.2f}, {}, {}'
-          .format(e, loss.item(), (train_loss / 16),
+        print('Epoch-{}, loss = {:.2f}, {}, {}'
+          .format(e, loss.item(),
           utils.format_dict(top1_a, '{:.2f}', '1-'),
           utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
-        train_loss = 0.0
         losses.append(loss.item())
-        plt.plot(losses)
+        x_axis.append(total_steps)
+        plt.xscale('log')
+        plt.yscale('log')
         plt.savefig('img/losses.png')
+        plt.clf()
 
-
-      if total_steps % 256 == 0:
+      if total_steps % 4000 == 0:
         top1, top5, val_loss = eval(model, dev_loader, encoder)
         model.train()
 
@@ -110,15 +104,11 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
                       '/{}_{}.model'.format( model_name, model_saving_name)
                     )
 
-          print ('**** New best model saved ****')
+          print ('**** New best model saved **** => {:.2f}'.format(best_score))
 
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
-    
-    epochlosses.append(epoch_loss/len(train_loader))
-    plt.plot(epochlosses)
-    plt.savefig('img/epochlosses.png')
-    print("Epoch-{} loss {:.3f}".format(e, epoch_loss/len(train_loader)) )
+
     scheduler.step()
     
 def eval(model, dev_loader, encoder, write_to_file = False):
