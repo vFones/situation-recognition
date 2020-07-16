@@ -152,7 +152,8 @@ class GGNN_Baseline(nn.Module):
 
 def build_ggnn_baseline(n_roles, n_verbs, num_ans_classes, encoder):
   layersize = 2048
-  covnet = resnet_modified().cuda()
+  covnet = resnext_modified().cuda()
+  
   role_emb = nn.Embedding(n_roles+1, layersize, padding_idx=n_roles)
   verb_emb = nn.Embedding(n_verbs, layersize)
   ggnn = GGNN(n_node=encoder.max_role_count, layersize=layersize)
