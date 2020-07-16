@@ -270,7 +270,7 @@ if __name__ == '__main__':
         
         start = time.time()
         for epoch in range(4):
-          for batch_idx, (data, target) in enumerate(train_loader):
+          for batch_idx, (_, img, verb, labels) in enumerate(train_loader):
             if batch_idx == 15:
               break
             pass
