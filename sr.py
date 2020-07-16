@@ -58,7 +58,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       top1.add_point_noun(verb, role_predict, labels)
       top5.add_point_noun(verb, role_predict, labels)
 
-      if total_steps % 512 == 0:
+      if total_steps % 32 == 0:
         top1_a = top1.get_average_results_nouns()
         top5_a = top5.get_average_results_nouns()
         print('Epoch-{}, loss = {:.2f}, {}, {}'
@@ -68,12 +68,11 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         )
         losses.append(loss.item())
         x_axis.append(total_steps)
-        plt.xscale('log')
-        plt.yscale('log')
+        plt.plot(x_axis, losses)
         plt.savefig('img/losses.png')
         plt.clf()
 
-      if total_steps % 4000 == 0:
+      if total_steps % 256 == 0:
         top1, top5, val_loss = eval(model, dev_loader, encoder)
         model.train()
 
