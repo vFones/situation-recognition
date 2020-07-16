@@ -33,7 +33,16 @@ class resnext_modified(nn.Module):
 
   def forward(self, x):
     return self.resnext(x)
-    
+
+class resnet_modified(nn.Module):
+  def __init__(self):
+    super(resnet_modified, self).__init__()
+    self.resnet = tv.models.resnet152(pretrained=True)
+    self.resnet.fc = nn.Identity()
+  
+  def forward(self, x):
+    return self.resnet(x)
+
 class GGNN(nn.Module):
   """
   Gated Graph Sequence Neural Networks (GGNN)
@@ -143,7 +152,7 @@ class GGNN_Baseline(nn.Module):
 
 def build_ggnn_baseline(n_roles, n_verbs, num_ans_classes, encoder):
   layersize = 2048
-  covnet = resnext_modified()
+  covnet = resnet_modified()
   role_emb = nn.Embedding(n_roles+1, layersize, padding_idx=n_roles)
   verb_emb = nn.Embedding(n_verbs, layersize)
   ggnn = GGNN(n_node=encoder.max_role_count, layersize=layersize)
