@@ -176,15 +176,15 @@ if __name__ == '__main__':
   model = model.build_ggnn_baseline(encoder.get_num_roles(), encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
   
   train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_set, encoder,'train', encoder.train_transform)
-  train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+  train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=args.num_workers)
 
   dev_set = json.load(open(args.dataset_folder + '/' + args.dev_file))
   dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_set, encoder, 'val', encoder.dev_transform)
-  dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+  dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=args.num_workers)
 
   test_set = json.load(open(args.dataset_folder + '/' + args.test_file))
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_set, encoder, 'test', encoder.dev_transform)
-  test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+  test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.batch_size, shuffle=True, pin_memory=True, num_workers=args.num_workers)
 
   if not os.path.exists('trained_models'):
     os.mkdir('trained_models')
