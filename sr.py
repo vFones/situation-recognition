@@ -68,39 +68,21 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         plt.plot(losses)
         plt.savefig('img/losses.png')
         plt.clf()
+    
 
-      if total_steps % 512 == 0:
-        top1, top5, val_loss = eval(model, dev_loader, encoder)
-        model.train()
+    checkpoint = { 
+      'epoch': e,
+      'losses': losses,
+      'model_state_dict': model.module.state_dict(),
+      'optimizer_state_dict': optimizer.state_dict(),
+      'scheduler_state_dict': scheduler.state_dict()
+    }
+      
+    torch.save(checkpoint, 'trained_models' +
+                '/{}_{}.model'.format( model_name, model_saving_name)
+              )
 
-        top1_avg = top1.get_average_results_nouns()
-        top5_avg = top5.get_average_results_nouns()
-
-        #avg_score = top1_avg['verb'] + top1_avg['value'] + \
-        #            top1_avg['value-all'] + top5_avg['verb'] + \
-        #            top5_avg['value'] + top5_avg['value-all'] + \
-        #            top5_avg['value*'] + top5_avg['value-all*']
-        #avg_score /= 8
-
-        print('=> Dev {}, {}'.format( utils.format_dict(top1_avg,'{:.2f}', '1-'),
-                                      utils.format_dict(top5_avg, '{:.2f}', '5-')))
-        
-        checkpoint = { 
-          'epoch': e+1,
-          'losses': losses,
-          'model_state_dict': model.module.state_dict(),
-          'optimizer_state_dict': optimizer.state_dict(),
-          'scheduler_state_dict': scheduler.state_dict()
-        }
-          
-        torch.save(checkpoint, 'trained_models' +
-                   '/{}_{}.model'.format( model_name, model_saving_name)
-                  )
-
-        print ('**** New model saved ****')
-
-        top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
-        top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
+    print ('**** model saved ****')
 
     scheduler.step()
     
