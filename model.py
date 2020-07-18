@@ -96,8 +96,6 @@ class FCGGNN(nn.Module):
     self.verb_emb = nn.Embedding(encoder.get_num_verbs(), D_hidden_state)
 
     self.convnet = resnet_modified()
-    self.role_emb = role_emb
-    self.verb_emb = verb_emb
     self.ggsnn = GGSNN(n_node=encoder.max_role_count, layersize=D_hidden_state)
 
     self.verb_classifier = nn.Sequential(
