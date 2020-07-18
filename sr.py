@@ -4,7 +4,7 @@ import os
 from sys import float_info
 import matplotlib.pyplot as plt
 
-import model
+from model import FCGGNN
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_name, model_saving_name, checkpoint=None):
@@ -31,30 +31,29 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         optimizer.param_groups[0]['lr']
       )
     )
-    for i, (_, img, verb, labels) in enumerate(train_loader):
+    for i, (_, img, verb, nouns) in enumerate(train_loader):
       total_steps += 1
 
       img = img.cuda()
       verb = verb.cuda()
-      labels = labels.cuda()
+      nouns = nouns.cuda()
       
       optimizer.zero_grad()
 
-      role_predict = model(img, verb)
+      pred_verb, pred_nouns, gt_pred_nouns = model(img, verb)
 
-      loss = model.module.calculate_loss(verb, role_predict, labels)
+      loss = model.module.calculate_loss(verb, gt_pred_nouns, nouns)
       loss.backward()
 
       torch.nn.utils.clip_grad_value_(model.parameters(), 1)
 
       optimizer.step()
-
-      top1.add_point_noun(verb, role_predict, labels)
-      top5.add_point_noun(verb, role_predict, labels)
-
+      top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      
       if total_steps % 32 == 0:
-        top1_a = top1.get_average_results_nouns()
-        top5_a = top5.get_average_results_nouns()
+        top1_a = top1.get_average_results_both()
+        top5_a = top5.get_average_results_both()
         print('Epoch-{}, loss = {:.2f}, {}, {}'
           .format(e, loss.item(),
           utils.format_dict(top1_a, '{:.2f}', '1-'),
@@ -82,28 +81,24 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
     scheduler.step()
     
-def eval(model, dev_loader, encoder, write_to_file = False):
+def eval(model, dev_loader, encoder):
   model.eval()
 
   print ('=> evaluating model...')
-  top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3, write_to_file)
+  top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
   with torch.no_grad():
 
-    for i, (img_id, img, verb, labels) in enumerate(dev_loader):
+    for i, (img_id, img, verb, nouns) in enumerate(dev_loader):
 
       img = img.cuda()
       verb = verb.cuda()
-      labels = labels.cuda()
+      nouns = nouns.cuda()
 
-      role_predict = model(img, verb)
+      pred_verb, pred_nouns, gt_pred_nouns = model(img, verb)
 
-      if write_to_file:
-        top1.add_point_noun_log(img_id, verb, role_predict, labels)
-        top5.add_point_noun_log(img_id, verb, role_predict, labels)
-      else:
-        top1.add_point_noun(verb, role_predict, labels)
-        top5.add_point_noun(verb, role_predict, labels)
+      top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
 
   return top1, top5, 0
 
@@ -150,8 +145,8 @@ if __name__ == '__main__':
     encoder = torch.load('encoder')
 
 
-  model = model.build_ggnn_baseline(encoder.get_num_roles(), encoder.get_num_verbs(), encoder.get_num_labels(), encoder)
-  
+  model = FCGGNN(encoder, 2048)
+
   train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_set, encoder,'train', encoder.train_transform)
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 

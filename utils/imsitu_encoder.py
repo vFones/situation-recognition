@@ -352,7 +352,3 @@ class imsitu_encoder():
     encoding_all = torch.stack(matrix_list).type(torch.FloatTensor)
 
     return encoding_all
-
-
-
-

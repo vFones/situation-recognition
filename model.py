@@ -43,14 +43,14 @@ class resnet_modified(nn.Module):
   def forward(self, x):
     return self.resnet(x)
 
-class GGNN(nn.Module):
+class GGSNN(nn.Module):
   """
   Gated Graph Sequence Neural Networks (GGNN)
   Mode: SelectNode
   Implementation based on https://arxiv.org/abs/1511.05493
   """
   def __init__(self, n_node, layersize):
-    super(GGNN, self).__init__()
+    super(GGSNN, self).__init__()
 
     self.n_node = n_node
     #neighbour projection
@@ -87,21 +87,39 @@ class GGNN(nn.Module):
 
     return hidden_state
 
-class GGNN_Baseline(nn.Module):
-  def __init__(self, convnet, role_emb, verb_emb, ggnn, classifier, encoder):
-    super(GGNN_Baseline, self).__init__()
-    self.convnet = convnet
+class FCGGNN(nn.Module):
+  def __init__(self, encoder, D_hidden_state):
+    super(FCGGNN, self).__init__()
+    self.encoder = encoder
+    
+    self.role_emb = nn.Embedding(encoder.get_num_roles()+1, D_hidden_state, padding_idx=encoder.get_num_roles())
+    self.verb_emb = nn.Embedding(encoder.get_num_verbs(), D_hidden_state)
+
+    self.convnet = resnet_modified()
     self.role_emb = role_emb
     self.verb_emb = verb_emb
-    self.ggnn = ggnn
-    self.classifier = classifier
-    self.encoder = encoder
+    self.ggsnn = GGSNN(n_node=encoder.max_role_count, layersize=D_hidden_state)
+    
+    self.gt_nouns_classifier = nn.Sequential(
+      nn.Dropout(0.5),
+      nn.Linear(D_hidden_state, encoder.get_num_labels())
+    )
 
+    self.verb_classifier = nn.Sequential(
+      nn.Dropout(0.5),
+      nn.Linear(D_hidden_state, encoder.get_num_labels())
+    )
 
-  def forward(self, img, gt_verb):
-    img_features = self.convnet(img)
+    self.nouns_classifier = nn.Sequential(
+      nn.Dropout(0.5),
+      nn.Linear(D_hidden_state, encoder.get_num_labels())
+    )
 
-    batch_size = img_features.size(0)
+    self.non_linear = nn.Sequential(
+      nn.ReLU(2048, encoder.get_num_labels())
+    )
+
+  def _predict_noun_with_gtverb(self, img_features, gt_verb, batch_size):
 
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
 
@@ -122,22 +140,46 @@ class GGNN_Baseline(nn.Module):
     verb_embed_expand = verb_embed_expand.transpose(0,1)
     verb_embed_expand = verb_embed_expand.contiguous().view(batch_size * self.encoder.max_role_count, -1)
 
-    input2ggnn = img_features * role_embd * verb_embed_expand
+    input2ggnn = self.non_linear(img_features * role_embd * verb_embed_expand)
 
     #mask out non exisiting roles from max role count a frame can have
     mask = self.encoder.get_adj_matrix_noself(gt_verb)
     mask = mask.cuda()
 
-    out = self.ggnn(input2ggnn, mask)
-
-    logits = self.classifier(out)
-
-    # return role_label_pred
+    out = self.ggsnn(input2ggnn, mask)
+    logits = self.gt_nouns_classifier(out)
+    # return predicted nouns based on grount truth of images in batch
     return logits.contiguous().view(batch_size, self.encoder.max_role_count, -1)
 
 
-  def calculate_loss(self, gt_verbs, role_label_pred, gt_labels):
+  def _predict_verb(self, img_features, batch_size):
+    mask = torch.tensor()
+    mask.cuda()
+    out = self.ggsnn(img_features, mask)
+    logits = self.gt_nouns_classifier(out)
+    # return predicted verb based on images in batch
+    return logits.contiguous().view(batch_size, 1, -1)
 
+
+  def _predict_nouns(self, img_features, pred_verb, batch_size):
+    mask = torch.tensor()
+    mask.cuda()
+    out = self.ggsnn(img_features, mask)
+    logits = self.gt_nouns_classifier(out)
+    # return predicted nouns based on images in batch
+    return logits.contiguous().view(batch_size, self.encoder.max_role_count, -1)
+
+
+  def forward(self, img, gt_verb):
+    img_features = self.convnet(img)
+    batch_size = img_features.size(0)
+    gt_pred_nouns = self._predict_noun_with_gtverb(img_features, gt_verb, batch_size)
+    pred_verb = self._predict_verb(img_features, batch_size)
+    pred_nouns = self._predict_nouns(img_features, pred_verb, batch_size)
+    return pred_verb, pred_nouns, gt_pred_nouns
+
+
+  def calculate_loss(self, gt_verbs, role_label_pred, gt_labels):
     batch_size = role_label_pred.size()[0]
     criterion = nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
 
@@ -149,17 +191,3 @@ class GGNN_Baseline(nn.Module):
     role_label_pred = role_label_pred.contiguous().view(-1, role_label_pred.size(-1))
 
     return criterion(role_label_pred, gt_label_turned.squeeze(1)) * 3
-
-def build_ggnn_baseline(n_roles, n_verbs, num_ans_classes, encoder):
-  layersize = 2048
-  covnet = resnet_modified()
-  
-  role_emb = nn.Embedding(n_roles+1, layersize, padding_idx=n_roles)
-  verb_emb = nn.Embedding(n_verbs, layersize)
-  ggnn = GGNN(n_node=encoder.max_role_count, layersize=layersize)
-  classifier = nn.Sequential(
-    nn.Dropout(0.5),
-    nn.Linear(layersize, num_ans_classes)
-  )
-
-  return GGNN_Baseline(covnet, role_emb, verb_emb, ggnn, classifier, encoder)
