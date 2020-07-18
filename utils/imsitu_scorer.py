@@ -2,7 +2,7 @@ import torch
 import json
 
 class imsitu_scorer():
-  def __init__(self, encoder,topk, nref, write_to_file=False):
+  def __init__(self, encoder, topk, nref, write_to_file=False):
     self.score_cards = []
     self.topk = topk
     self.nref = nref
@@ -27,8 +27,6 @@ class imsitu_scorer():
     self.score_cards = {}
 
   def add_point_noun(self, gt_verbs, labels_predict, gt_labels):
-
-
     batch_size = gt_verbs.size()[0]
     for i in range(batch_size):
       gt_verb = gt_verbs[i]
@@ -38,7 +36,8 @@ class imsitu_scorer():
       gt_v = gt_verb
       role_set = self.encoder.get_role_ids(gt_v)
 
-      new_card = {"verb":0.0, "value":0.0, "value*":0.0, "n_value":0.0, "value-all":0.0, "value-all*":0.0}
+      new_card = {"verb":0.0, "value":0.0, "value*":0.0, \
+                  "n_value":0.0, "value-all":0.0, "value-all*":0.0}
 
       score_card = new_card
 
@@ -55,7 +54,7 @@ class imsitu_scorer():
         label_id = torch.max(label_pred[k],0)[1]
         pred_list.append(label_id.item())
         found = False
-        for r in range(0,self.nref):
+        for r in range(0, self.nref):
           gt_label_id = gt_label[r][k]
           if label_id == gt_label_id:
             found = True
@@ -73,7 +72,6 @@ class imsitu_scorer():
       if all_found: score_card["value-all*"] += 1
 
       self.score_cards.append(new_card)
-
 
   def add_point_noun_log_topk(self, img_id, gt_verbs, labels_predict, gt_labels):
 
@@ -203,7 +201,6 @@ class imsitu_scorer():
       if verb_found:
         score_card["verb"] += 1
 
-      #verb_found = False
 
       gt_role_count = self.encoder.get_role_count(gt_v)
       gt_role_list = self.encoder.verb2_role_dict[self.encoder.verb_list[gt_v]]

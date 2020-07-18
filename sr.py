@@ -8,16 +8,12 @@ import model
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_name, model_saving_name, checkpoint=None):
-
   model.train()
 
   losses = []
   x_axis = []
   epoch = 0
   total_steps = 0
-
-  print('Using', torch.cuda.device_count(), 'GPUs!')
-  model = torch.nn.DataParallel(model)
   
   if checkpoint is not None:
     epoch = checkpoint['epoch']
@@ -132,8 +128,12 @@ if __name__ == '__main__':
   
   parser.add_argument('--batch_size', type=int, default=64)
   parser.add_argument('--num_workers', type=int, default=8)
+
   parser.add_argument('--epochs', type=int, default=500)
-  parser.add_argument('--decay', type=float, default=0.85)
+  parser.add_argument('--lr', type=float, default=1e-2) 
+  parser.add_argument('--steplr', type=int, default=15)
+  parser.add_argument('--decay', type=float, default=0.1)
+  parser.add_argument('--optim', type=str)
   parser.add_argument('--seed', type=int, default=1111, help='random seed')
 
   args = parser.parse_args()
@@ -167,7 +167,10 @@ if __name__ == '__main__':
     os.mkdir('trained_models')
   checkpoint = None
 
+  print('Using', torch.cuda.device_count(), 'GPUs!')
+  model = torch.nn.DataParallel(model)
   model.cuda()
+
   torch.manual_seed(args.seed)
   torch.backends.cudnn.benchmark = True
 
@@ -180,16 +183,24 @@ if __name__ == '__main__':
 
     utils.load_net(args.resume_model, [model])
     
-    optimizer = torch.optim.Adamax(model.parameters(), lr=1e-3)
     model_name = 'resume_all'
 
   else:
     print('Training from the scratch.')
     model_name = 'train_full'
     utils.set_trainable(model, True)
-    optimizer = torch.optim.Adamax(model.parameters(), lr=1e-3)
-    
-  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20 ,gamma=args.decay)
+  
+  if args.optim is None:
+    print('no optimizer selected')
+    exit(-1)
+  elif args.optim == 'SDG':
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+  elif args.optim == 'ADAMAX':
+    optimizer = torch.optim.Adamax(model.parameters(), lr=args.lr)
+  elif args.optim == 'RMSPROP':
+    optimizer = torch.optim.RMSprop(model.parameters(), lr=args.lr, alpha=0.9, momentum=0.9)
+  
+  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.steplr, gamma=args.decay)
   
   if args.evaluate:
     top1, top5, val_loss = eval(model, dev_loader, encoder)

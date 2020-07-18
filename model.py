@@ -105,7 +105,7 @@ class GGNN_Baseline(nn.Module):
 
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
 
-    role_idx = role_idx.to(torch.device('cuda'))
+    role_idx = role_idx.cuda()
 
     # repeat single image for max role count a frame can have
     img_features = img_features.expand(self.encoder.max_role_count, img_features.size(0), img_features.size(1))
@@ -126,7 +126,7 @@ class GGNN_Baseline(nn.Module):
 
     #mask out non exisiting roles from max role count a frame can have
     mask = self.encoder.get_adj_matrix_noself(gt_verb)
-    mask = mask.to(torch.device('cuda'))
+    mask = mask.cuda()
 
     out = self.ggnn(input2ggnn, mask)
 
@@ -152,7 +152,7 @@ class GGNN_Baseline(nn.Module):
 
 def build_ggnn_baseline(n_roles, n_verbs, num_ans_classes, encoder):
   layersize = 2048
-  covnet = resnext_modified().cuda()
+  covnet = resnet_modified()
   
   role_emb = nn.Embedding(n_roles+1, layersize, padding_idx=n_roles)
   verb_emb = nn.Embedding(n_verbs, layersize)
