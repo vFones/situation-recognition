@@ -99,15 +99,10 @@ class FCGGNN(nn.Module):
     self.role_emb = role_emb
     self.verb_emb = verb_emb
     self.ggsnn = GGSNN(n_node=encoder.max_role_count, layersize=D_hidden_state)
-    
-    self.gt_nouns_classifier = nn.Sequential(
-      nn.Dropout(0.5),
-      nn.Linear(D_hidden_state, encoder.get_num_labels())
-    )
 
     self.verb_classifier = nn.Sequential(
       nn.Dropout(0.5),
-      nn.Linear(D_hidden_state, encoder.get_num_labels())
+      nn.Linear(D_hidden_state, 1)
     )
 
     self.nouns_classifier = nn.Sequential(
@@ -115,9 +110,6 @@ class FCGGNN(nn.Module):
       nn.Linear(D_hidden_state, encoder.get_num_labels())
     )
 
-    self.non_linear = nn.Sequential(
-      nn.ReLU(2048, encoder.get_num_labels())
-    )
 
   def _predict_noun_with_gtverb(self, img_features, gt_verb, batch_size):
 
@@ -140,14 +132,14 @@ class FCGGNN(nn.Module):
     verb_embed_expand = verb_embed_expand.transpose(0,1)
     verb_embed_expand = verb_embed_expand.contiguous().view(batch_size * self.encoder.max_role_count, -1)
 
-    input2ggnn = self.non_linear(img_features * role_embd * verb_embed_expand)
+    input2ggnn = torch.nn.functional.relu(img_features * role_embd * verb_embed_expand)
 
     #mask out non exisiting roles from max role count a frame can have
     mask = self.encoder.get_adj_matrix_noself(gt_verb)
     mask = mask.cuda()
 
     out = self.ggsnn(input2ggnn, mask)
-    logits = self.gt_nouns_classifier(out)
+    logits = self.nouns_classifier(out)
     # return predicted nouns based on grount truth of images in batch
     return logits.contiguous().view(batch_size, self.encoder.max_role_count, -1)
 
@@ -155,8 +147,11 @@ class FCGGNN(nn.Module):
   def _predict_verb(self, img_features, batch_size):
     mask = torch.tensor()
     mask.cuda()
+
+    img_features = torch.nn.functional.tanh(img_features)
+
     out = self.ggsnn(img_features, mask)
-    logits = self.gt_nouns_classifier(out)
+    logits = self.verb_classifier(out)
     # return predicted verb based on images in batch
     return logits.contiguous().view(batch_size, 1, -1)
 
@@ -164,8 +159,11 @@ class FCGGNN(nn.Module):
   def _predict_nouns(self, img_features, pred_verb, batch_size):
     mask = torch.tensor()
     mask.cuda()
+
+    img_features = torch.nn.functional.tanh(img_features)
+
     out = self.ggsnn(img_features, mask)
-    logits = self.gt_nouns_classifier(out)
+    logits = self.nouns_classifier(out)
     # return predicted nouns based on images in batch
     return logits.contiguous().view(batch_size, self.encoder.max_role_count, -1)
 
@@ -173,10 +171,12 @@ class FCGGNN(nn.Module):
   def forward(self, img, gt_verb):
     img_features = self.convnet(img)
     batch_size = img_features.size(0)
-    gt_pred_nouns = self._predict_noun_with_gtverb(img_features, gt_verb, batch_size)
+
     pred_verb = self._predict_verb(img_features, batch_size)
     pred_nouns = self._predict_nouns(img_features, pred_verb, batch_size)
-    return pred_verb, pred_nouns, gt_pred_nouns
+    gt_pred_nouns = self._predict_noun_with_gtverb(img_features, gt_verb, batch_size)
+
+    return 0, 0, gt_pred_nouns
 
 
   def calculate_loss(self, gt_verbs, role_label_pred, gt_labels):
