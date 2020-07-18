@@ -12,10 +12,9 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   model.train()
 
   losses = []
-  x_axis = [] 
+  x_axis = []
   epoch = 0
   total_steps = 0
-  best_score = float_info.min
 
   print('Using', torch.cuda.device_count(), 'GPUs!')
   model = torch.nn.DataParallel(model)
@@ -23,8 +22,6 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   if checkpoint is not None:
     epoch = checkpoint['epoch']
     losses = checkpoint['losses']
-    x_axis = checkpoint['x_axis']
-    best_score = checkpoint['best_score']
     model.module.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -68,45 +65,39 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
           utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
         losses.append(loss.item())
-        x_axis.append(total_steps)
-        plt.plot(x_axis, losses)
+        plt.plot(losses)
         plt.savefig('img/losses.png')
         plt.clf()
 
-      if total_steps % 256 == 0:
+      if total_steps % 512 == 0:
         top1, top5, val_loss = eval(model, dev_loader, encoder)
         model.train()
 
         top1_avg = top1.get_average_results_nouns()
         top5_avg = top5.get_average_results_nouns()
 
-        avg_score = top1_avg['verb'] + top1_avg['value'] + top1_avg['value-all'] + top5_avg['verb'] + \
-                    top5_avg['value'] + top5_avg['value-all'] + top5_avg['value*'] + top5_avg['value-all*']
-        avg_score /= 8
+        #avg_score = top1_avg['verb'] + top1_avg['value'] + \
+        #            top1_avg['value-all'] + top5_avg['verb'] + \
+        #            top5_avg['value'] + top5_avg['value-all'] + \
+        #            top5_avg['value*'] + top5_avg['value-all*']
+        #avg_score /= 8
 
-        print ('=> Dev average: {:.2f}, {}, {}'.format(avg_score*100,
-                                        utils.format_dict(top1_avg,'{:.2f}', '1-'),
-                                        utils.format_dict(top5_avg, '{:.2f}', '5-')))
+        print('=> Dev {}, {}'.format( utils.format_dict(top1_avg,'{:.2f}', '1-'),
+                                      utils.format_dict(top5_avg, '{:.2f}', '5-')))
         
-        is_best = avg_score > best_score
-        best_score = max(avg_score, best_score)
-
-        if is_best:
-          checkpoint = { 
-            'epoch': e+1,
-            'losses': losses,
-            'x_axis': x_axis,
-            'best_score': best_score,
-            'model_state_dict': model.module.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict()
-            }
+        checkpoint = { 
+          'epoch': e+1,
+          'losses': losses,
+          'model_state_dict': model.module.state_dict(),
+          'optimizer_state_dict': optimizer.state_dict(),
+          'scheduler_state_dict': scheduler.state_dict()
+        }
           
-          torch.save( checkpoint, 'trained_models' +
-                      '/{}_{}.model'.format( model_name, model_saving_name)
-                    )
+        torch.save(checkpoint, 'trained_models' +
+                   '/{}_{}.model'.format( model_name, model_saving_name)
+                  )
 
-          print ('**** New best model saved **** => {:.2f}'.format(best_score))
+        print ('**** New model saved ****')
 
         top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
         top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
