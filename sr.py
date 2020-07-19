@@ -146,7 +146,7 @@ if __name__ == '__main__':
   n_epoch = args.epochs
 
   with open(os.path.join(args.dataset_folder, args.train_file), 'r') as f:
-    train_json = json.load(f)
+    train_json = json.loads(f)
 
 
   if not os.path.isfile('./encoder'):
@@ -161,13 +161,13 @@ if __name__ == '__main__':
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
   with open(os.path.join(args.dataset_folder, args.dev_file), 'r') as f:
-    dev_json = json.load(f)
+    dev_json = json.loads(f)
 
   dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_json, encoder, encoder.dev_transform)
   dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
   with open(os.path.join(args.dataset_folder, args.test_file), 'r') as f:
-    test_json = json.load(f)
+    test_json = json.loads(f)
 
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
