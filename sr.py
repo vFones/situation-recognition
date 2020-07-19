@@ -145,29 +145,30 @@ if __name__ == '__main__':
 
   n_epoch = args.epochs
 
-  with open(args.dataset_folder+'/'+args.train_file, 'r') as f:
+  with open(os.path.join(args.dataset_folder, args.train_file), 'r') as f:
     train_json = json.load(f)
-  
+
+
   if not os.path.isfile('./encoder'):
     encoder = imsitu_encoder.imsitu_encoder(train_json)
     torch.save(encoder, 'encoder')
   else:
-    print("Loaded encoded file")
+    print("Loading encoded file")
     encoder = torch.load('encoder')
 
-
-  model = FCGGNN(encoder, D_hidden_state=2048)
 
   train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_json, encoder, encoder.train_transform)
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  with open(args.dataset_folder+'/'+args.dev_file, 'r') as f:
+  with open(os.path.join(args.dataset_folder, args.dev_file), 'r') as f:
     dev_json = json.load(f)
+
   dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_json, encoder, encoder.dev_transform)
   dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  with open(args.dataset_folder+'/'+args.test_file, 'r') as f:
+  with open(os.path.join(args.dataset_folder, args.test_file), 'r') as f:
     test_json = json.load(f)
+
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
@@ -175,7 +176,9 @@ if __name__ == '__main__':
     os.mkdir('trained_models')
   checkpoint = None
 
+
   print('Using', torch.cuda.device_count(), 'GPUs!')
+  model = FCGGNN(encoder, D_hidden_state=2048)
   model = torch.nn.DataParallel(model)
   model.cuda()
 
@@ -183,24 +186,21 @@ if __name__ == '__main__':
   torch.backends.cudnn.benchmark = True
 
   if args.resume_training:
-    print('Resume training from: {}'.format(args.resume_model))
-    checkpoint = torch.load(args.resume_model)
-
     if len(args.resume_model) == 0:
       raise Exception('[pretrained module] not specified')
 
-    utils.load_net(args.resume_model, [model])
-    
-    model_name = 'resume_all'
+    print('Resume training from: {}'.format(args.resume_model))
+    checkpoint = torch.load(args.resume_model)
 
+    utils.load_net(args.resume_model, [model])
+    model_name = 'resume_all'
   else:
     print('Training from the scratch.')
     model_name = 'train_full'
     utils.set_trainable(model, True)
   
   if args.optim is None:
-    print('no optimizer selected')
-    exit(-1)
+    raise Exception('no optimizer selected')
   elif args.optim == 'SDG':
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
   elif args.optim == 'ADAMAX':
