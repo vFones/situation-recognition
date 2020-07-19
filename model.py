@@ -7,24 +7,6 @@ import torch
 import torch.nn as nn
 import torchvision as tv
 
-class vgg16_modified(nn.Module):
-  def __init__(self):
-    super(vgg16_modified, self).__init__()
-    vgg = tv.models.vgg16_bn(pretrained=True)
-    self.vgg_features = vgg.features
-    self.out_features = vgg.classifier[6].in_features
-    features = list(vgg.classifier.children())[:-1] # Remove last layer
-    self.vgg_classifier = nn.Sequential(*features) # Replace the model classifier
-
-    self.resize = nn.Sequential(
-      nn.Linear(4096, 1024)
-    )
-
-  def forward(self,x):
-    features = self.vgg_features(x)
-    y = self.resize(self.vgg_classifier(features.view(-1, 512*7*7)))
-    return y
-
 class resnext_modified(nn.Module):
   def __init__(self):
     super(resnext_modified, self).__init__()
@@ -109,7 +91,7 @@ class FCGGNN(nn.Module):
     )
 
 
-  def _predict_noun_with_gtverb(self, img_features, gt_verb, batch_size):
+  def __predict_noun_with_gtverb(self, img_features, gt_verb, batch_size):
 
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
 
@@ -142,7 +124,7 @@ class FCGGNN(nn.Module):
     return logits.contiguous().view(batch_size, self.encoder.max_role_count, -1)
 
 
-  def _predict_verb(self, img_features, batch_size):
+  def __predict_verb(self, img_features, batch_size):
     mask = torch.tensor()
     mask.cuda()
 
@@ -154,7 +136,7 @@ class FCGGNN(nn.Module):
     return logits.contiguous().view(batch_size, 1, -1)
 
 
-  def _predict_nouns(self, img_features, pred_verb, batch_size):
+  def __predict_nouns(self, img_features, pred_verb, batch_size):
     mask = torch.tensor()
     mask.cuda()
 
@@ -170,11 +152,12 @@ class FCGGNN(nn.Module):
     img_features = self.convnet(img)
     batch_size = img_features.size(0)
 
-    pred_verb = self._predict_verb(img_features, batch_size)
-    pred_nouns = self._predict_nouns(img_features, pred_verb, batch_size)
-    gt_pred_nouns = self._predict_noun_with_gtverb(img_features, gt_verb, batch_size)
-
-    return 0, 0, gt_pred_nouns
+    #pred_verb = self.__predict_verb(img_features, batch_size)
+    #pred_nouns = self.__predict_nouns(img_features, pred_verb, batch_size)
+    gt_pred_nouns = self.__predict_noun_with_gtverb(img_features, gt_verb, batch_size)
+    
+    #return pred_verb, pred_nouns, gt_pred_nouns
+    return gt_pred_nouns
 
 
   def calculate_loss(self, gt_verbs, role_label_pred, gt_labels):

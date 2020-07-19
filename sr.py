@@ -40,7 +40,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       
       optimizer.zero_grad()
 
-      pred_verb, pred_nouns, gt_pred_nouns = model(img, verb)
+      #pred_verb, pred_nouns, gt_pred_nouns = model(img, verb)
+      gt_pred_nouns = model(img, verb)
 
       loss = model.module.calculate_loss(verb, gt_pred_nouns, nouns)
       loss.backward()
@@ -48,12 +49,18 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       torch.nn.utils.clip_grad_value_(model.parameters(), 1)
 
       optimizer.step()
-      top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
-      top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
+
+      
+      #top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      #top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      top1.add_point_noun(verb, gt_pred_nouns, nouns)
+      top5.add_point_noun(verb, gt_pred_nouns, nouns)
       
       if total_steps % 32 == 0:
-        top1_a = top1.get_average_results_both()
-        top5_a = top5.get_average_results_both()
+        #top1_a = top1.get_average_results_both()
+        #top5_a = top5.get_average_results_both()
+        top1_a = top1.get_average_results_nouns()
+        top5_a = top5.get_average_results_nouns()
         print('Epoch-{}, loss = {:.2f}, {}, {}'
           .format(e, loss.item(),
           utils.format_dict(top1_a, '{:.2f}', '1-'),
@@ -95,10 +102,13 @@ def eval(model, dev_loader, encoder):
       verb = verb.cuda()
       nouns = nouns.cuda()
 
-      pred_verb, pred_nouns, gt_pred_nouns = model(img, verb)
+      #pred_verb, pred_nouns, gt_pred_nouns = model(img, verb)
+      gt_pred_nouns = model(img, verb)
 
-      top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
-      top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      #top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      #top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      top1.add_point_noun(verb, gt_pred_nouns, nouns)
+      top5.add_point_noun(verb, gt_pred_nouns, nouns)
 
   return top1, top5, 0
 
@@ -214,8 +224,10 @@ if __name__ == '__main__':
 
 
   elif args.test:
-    top1, top5, val_loss = eval(model, test_loader, encoder)
+    top1, top5, _ = eval(model, test_loader, encoder)
 
+    #top1_a = top1.get_average_results_both()
+    #top5_a = top5.get_average_results_both()
     top1_avg = top1.get_average_results_nouns()
     top5_avg = top5.get_average_results_nouns()
 
