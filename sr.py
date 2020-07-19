@@ -145,27 +145,30 @@ if __name__ == '__main__':
 
   n_epoch = args.epochs
 
-  train_set = json.load(open(args.dataset_folder + '/' + args.train_file))
+  with open(args.dataset_folder+'/'+args.train_file, 'r') as f:
+    train_json = json.load(f)
   
   if not os.path.isfile('./encoder'):
-    encoder = imsitu_encoder.imsitu_encoder(train_set)
+    encoder = imsitu_encoder.imsitu_encoder(train_json)
     torch.save(encoder, 'encoder')
   else:
-    print("Loaded already encoded file")
+    print("Loaded encoded file")
     encoder = torch.load('encoder')
 
 
-  model = FCGGNN(encoder, 2048)
+  model = FCGGNN(encoder, D_hidden_state=2048)
 
-  train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_set, encoder,'train', encoder.train_transform)
+  train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_json, encoder, encoder.train_transform)
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  dev_set = json.load(open(args.dataset_folder + '/' + args.dev_file))
-  dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_set, encoder, 'val', encoder.dev_transform)
+  with open(args.dataset_folder+'/'+args.dev_file, 'r') as f:
+    dev_json = json.load(f)
+  dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_json, encoder, encoder.dev_transform)
   dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  test_set = json.load(open(args.dataset_folder + '/' + args.test_file))
-  test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_set, encoder, 'test', encoder.dev_transform)
+  with open(args.dataset_folder+'/'+args.test_file, 'r') as f:
+    test_json = json.load(f)
+  test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
   if not os.path.exists('trained_models'):
