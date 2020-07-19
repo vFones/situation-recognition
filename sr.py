@@ -123,8 +123,8 @@ if __name__ == '__main__':
   parser.add_argument('--model_saving_name', type=str, help='saving name of the outpul model')
   parser.add_argument('--benchmark', default=False, action='store_true', help='Benchmark batches loading')
 
-  parser.add_argument('--dataset_folder', type=str, default='./imSitu', help='Location of annotations')
-  parser.add_argument('--imgset_dir', type=str, default='./resized_256', help='Location of original images')
+  parser.add_argument('--dataset_folder', type=str, default='imSitu', help='Location of annotations')
+  parser.add_argument('--imgset_dir', type=str, default='resized_256', help='Location of original images')
 
   parser.add_argument('--train_file', type=str, default='train.json', help='Train json file')
   parser.add_argument('--dev_file', type=str, default='dev.json', help='Dev json file')
@@ -146,7 +146,7 @@ if __name__ == '__main__':
   n_epoch = args.epochs
 
   with open(os.path.join(args.dataset_folder, args.train_file), 'r') as f:
-    train_json = json.loads(f)
+    train_json = json.load(f)
 
 
   if not os.path.isfile('./encoder'):
@@ -161,13 +161,13 @@ if __name__ == '__main__':
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
   with open(os.path.join(args.dataset_folder, args.dev_file), 'r') as f:
-    dev_json = json.loads(f)
+    dev_json = json.load(f)
 
   dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_json, encoder, encoder.dev_transform)
   dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
   with open(os.path.join(args.dataset_folder, args.test_file), 'r') as f:
-    test_json = json.loads(f)
+    test_json = json.load(f)
 
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
