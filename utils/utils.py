@@ -2,22 +2,16 @@ import torch
 import numpy as np
 import pdb
 
-def load_net(fname, net_list, prefix_list = None):
+def load_net(fname, net_list):
   '''
   loading a pretrained model weights from a file
   '''
-  need_modification = False
-  if prefix_list is not None and len(prefix_list) > 0:
-    need_modification = True
   for i in range(0, len(net_list)):
     checkpoint = torch.load(fname)
     dict = checkpoint['model_state_dict']
     
     try:
-      for k, v in net_list[i].state_dict().items():
-        if need_modification:
-          k = prefix_list[i] + '.' + k
-
+      for k, v in net_list[i].module.state_dict().items():
         if k in dict:
           param = torch.from_numpy(np.asarray(dict[k].cpu()))
           v.copy_(param)
