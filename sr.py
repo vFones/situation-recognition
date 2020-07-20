@@ -40,9 +40,9 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       
       optimizer.zero_grad()
 
-      pred_verb, pred_nouns, gt_pred_nouns = model(img, verb)
+      pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
 
-      verb_loss, nouns_loss, gt_loss = model.module.calculate_loss(pred_verb, verb, pred_nouns, nouns)
+      verb_loss, nouns_loss, gt_loss = model.module.calculate_loss(pred_verb, pred_nouns, pred_gt_nouns, verb, nouns)
       
       verb_loss.backward()
       nouns_loss.backward()
@@ -52,10 +52,10 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
       optimizer.step()
       
-      top1.add_point_both(pred_verb, verb, pred_nouns, nouns, gt_pred_nouns)
-      top5.add_point_both(pred_verb, verb, pred_nouns, nouns, gt_pred_nouns)
-      #top1.add_point_noun(verb, gt_pred_nouns, nouns)
-      #top5.add_point_noun(verb, gt_pred_nouns, nouns)
+      top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
+      top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
+      #top1.add_point_noun(verb, pred_gt_nouns, nouns)
+      #top5.add_point_noun(verb, pred_gt_nouns, nouns)
       
       if total_steps % 32 == 0:
         top1_a = top1.get_average_results_both()
@@ -103,13 +103,13 @@ def eval(model, dev_loader, encoder):
       verb = verb.cuda()
       nouns = nouns.cuda()
 
-      pred_verb, pred_nouns, gt_pred_nouns = model(img, verb)
-      #gt_pred_nouns = model(img, verb)
+      pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
+      #pred_gt_nouns = model(img, verb)
 
       top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
       top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
-      #top1.add_point_noun(verb, gt_pred_nouns, nouns)
-      #top5.add_point_noun(verb, gt_pred_nouns, nouns)
+      #top1.add_point_noun(verb, pred_gt_nouns, nouns)
+      #top5.add_point_noun(verb, pred_gt_nouns, nouns)
 
   return top1, top5, 0
 
