@@ -96,7 +96,7 @@ class FCGGNN(nn.Module):
 
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
 
-    role_idx = role_idx.cuda()
+    #role_idx = role_idx.cuda()
 
     # repeat single image for max role count a frame can have
     img_features = img_features.expand(self.encoder.max_role_count, img_features.size(0), img_features.size(1))
@@ -117,7 +117,7 @@ class FCGGNN(nn.Module):
 
     #mask out non exisiting roles from max role count a frame can have
     mask = self.encoder.get_adj_matrix_noself(gt_verb)
-    mask = mask.cuda()
+    #mask = mask.cuda()
 
     out = self.ggsnn(input2ggnn, mask)
     logits = self.nouns_classifier(out)
@@ -162,8 +162,7 @@ class FCGGNN(nn.Module):
     pred_nouns = pred_nouns.expand(3, pred_nouns.size(0), pred_nouns.size(1))
     pred_nouns = pred_nouns.transpose(0,1)
     pred_nouns = pred_nouns.contiguous().view(-1, pred_nouns.size(-1))
-    nouns_loss = nouns_pred_criterion(pred_nouns,  gt_label_turned.squeeze(1))
-    
+    nouns_loss = nouns_pred_criterion(pred_nouns,  gt_label_turned.squeeze(1)) * 3
 
     pred_gt_nouns = pred_gt_nouns.contiguous().view(batch_size* self.encoder.max_role_count, -1)
     pred_gt_nouns = pred_gt_nouns.expand(3, pred_gt_nouns.size(0), pred_gt_nouns.size(1))

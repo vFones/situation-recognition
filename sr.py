@@ -44,9 +44,9 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
       verb_loss, nouns_loss, gt_loss = model.module.calculate_loss(pred_verb, pred_nouns, pred_gt_nouns, verb, nouns)
       
-      verb_loss.backward()
-      nouns_loss.backward()
-      gt_loss.backward()
+      verb_loss.backward(retain_graph=True)
+      nouns_loss.backward(retain_graph=True)
+      gt_loss.backward(retain_graph=True)
       
       torch.nn.utils.clip_grad_value_(model.parameters(), 1)
 
