@@ -125,35 +125,35 @@ class FCGGNN(nn.Module):
 
 
   def __predict_verb(self, img_features, batch_size):
-    img_features = torch.tanh(img_features)
+    img_features = torch.nn.functional.relu(img_features)
+    logits = self.verb_classifier(img_features)
 
-    out = self.verb_classifier(img_features)
     # return predicted verb based on images in batch
-    return torch.argmax(out, dim=1)
+    return logits.contiguous().view(batch_size, -1)
+
 
 
   def forward(self, img, gt_verb):
     img_features = self.convnet(img)
-    img_features = torch.relu(img_features)
     batch_size = img_features.size(0)
 
     pred_verb = self.__predict_verb(img_features, batch_size)
-    pred_nouns = self.__predict_nouns(img_features, pred_verb, batch_size)
+    pred_nouns = self.__predict_nouns(img_features, torch.argmax(pred_verb, dim=1), batch_size)
     gt_pred_nouns = self.__predict_nouns(img_features, gt_verb, batch_size)
     
     return pred_verb, pred_nouns, gt_pred_nouns
     #return gt_pred_nouns
 
 
-  def calculate_loss(self, gt_verbs, role_label_pred, gt_labels):
-    batch_size = role_label_pred.size()[0]
+  def calculate_loss(self, pred_verb, gt_verbs, pred_labels, gt_labels):
+    batch_size = pred_labels.size()[0]
     criterion = nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
-
+    
     gt_label_turned = gt_labels.transpose(1,2).contiguous().view(batch_size* self.encoder.max_role_count*3, -1)
 
-    role_label_pred = role_label_pred.contiguous().view(batch_size* self.encoder.max_role_count, -1)
-    role_label_pred = role_label_pred.expand(3, role_label_pred.size(0), role_label_pred.size(1))
-    role_label_pred = role_label_pred.transpose(0,1)
-    role_label_pred = role_label_pred.contiguous().view(-1, role_label_pred.size(-1))
+    pred_labels = pred_labels.contiguous().view(batch_size* self.encoder.max_role_count, -1)
+    pred_labels = pred_labels.expand(3, pred_labels.size(0), pred_labels.size(1))
+    pred_labels = pred_labels.transpose(0,1)
+    pred_labels = pred_labels.contiguous().view(-1, pred_labels.size(-1))
 
-    return criterion(role_label_pred, gt_label_turned.squeeze(1)) * 3
+    return criterion(pred_labels, gt_label_turned.squeeze(1)) * 3
