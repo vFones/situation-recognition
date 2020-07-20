@@ -83,12 +83,14 @@ class FCGGNN(nn.Module):
     self.verb_classifier = nn.Sequential(
       nn.Dropout(0.5),
       nn.Linear(D_hidden_state, encoder.get_num_verbs()),
-      nn.Softmax(encoder.get_num_verbs(), 1)
+      nn.Softmax(),
+      nn.Linear(encoder.get_num_verbs(), 1)
     )
 
     self.nouns_classifier = nn.Sequential(
       nn.Dropout(0.5),
-      nn.Softmax(D_hidden_state, encoder.get_num_labels())
+      nn.Softmax(),
+      nn.Linear(D_hidden_state, encoder.get_num_labels())
     )
 
 
