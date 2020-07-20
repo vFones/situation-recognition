@@ -125,12 +125,11 @@ class FCGGNN(nn.Module):
 
 
   def __predict_verb(self, img_features, batch_size):
-    img_features = torch.nn.functional.tanh(img_features)
+    img_features = torch.tanh(img_features)
 
     out = self.verb_classifier(img_features)
     # return predicted verb based on images in batch
     return torch.argmax(out, dim=1)
-
 
 
   def forward(self, img, gt_verb):
