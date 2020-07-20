@@ -82,14 +82,11 @@ class FCGGNN(nn.Module):
 
     self.verb_classifier = nn.Sequential(
       nn.Dropout(0.5),
-      nn.Linear(D_hidden_state, encoder.get_num_verbs()),
-      nn.Softmax(),
-      nn.Linear(encoder.get_num_verbs(), 1)
+      nn.Linear(D_hidden_state, encoder.get_num_verbs())
     )
 
     self.nouns_classifier = nn.Sequential(
       nn.Dropout(0.5),
-      nn.Softmax(),
       nn.Linear(D_hidden_state, encoder.get_num_labels())
     )
 
@@ -132,11 +129,13 @@ class FCGGNN(nn.Module):
 
     out = self.verb_classifier(img_features)
     # return predicted verb based on images in batch
-    return out.contiguous().view(batch_size, 1, -1)
+    return torch.argmax(out, dim=1)
+
 
 
   def forward(self, img, gt_verb):
     img_features = self.convnet(img)
+    img_features = torch.relu(img_features)
     batch_size = img_features.size(0)
 
     pred_verb = self.__predict_verb(img_features, batch_size)
