@@ -82,7 +82,8 @@ class FCGGNN(nn.Module):
 
     self.verb_classifier = nn.Sequential(
       nn.Dropout(0.5),
-      nn.Softmax(D_hidden_state, encoder.get_num_verbs())
+      nn.Linear(D_hidden_state, encoder.get_num_verbs()),
+      nn.Softmax(encoder.get_num_verbs(), 1)
     )
 
     self.nouns_classifier = nn.Sequential(
@@ -91,7 +92,7 @@ class FCGGNN(nn.Module):
     )
 
 
-  def __predict_noun_with_gtverb(self, img_features, gt_verb, batch_size):
+  def __predict_nouns(self, img_features, gt_verb, batch_size):
 
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
 
@@ -132,24 +133,16 @@ class FCGGNN(nn.Module):
     return out.contiguous().view(batch_size, 1, -1)
 
 
-  def __predict_nouns(self, img_features, pred_verb, batch_size):
-    img_features = torch.nn.functional.tanh(img_features)
-    
-    out = self.nouns_classifier(img_features)
-    # return predicted nouns based on images in batch
-    return out.contiguous().view(batch_size, self.encoder.max_role_count, -1)
-
-
   def forward(self, img, gt_verb):
     img_features = self.convnet(img)
     batch_size = img_features.size(0)
 
-    #pred_verb = self.__predict_verb(img_features, batch_size)
-    #pred_nouns = self.__predict_nouns(img_features, pred_verb, batch_size)
-    gt_pred_nouns = self.__predict_noun_with_gtverb(img_features, gt_verb, batch_size)
+    pred_verb = self.__predict_verb(img_features, batch_size)
+    pred_nouns = self.__predict_nouns(img_features, pred_verb, batch_size)
+    gt_pred_nouns = self.__predict_nouns(img_features, gt_verb, batch_size)
     
-    #return pred_verb, pred_nouns, gt_pred_nouns
-    return gt_pred_nouns
+    return pred_verb, pred_nouns, gt_pred_nouns
+    #return gt_pred_nouns
 
 
   def calculate_loss(self, gt_verbs, role_label_pred, gt_labels):
