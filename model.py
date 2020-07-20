@@ -82,7 +82,8 @@ class FCGGNN(nn.Module):
 
     self.verb_classifier = nn.Sequential(
       nn.Dropout(0.5),
-      nn.Linear(D_hidden_state, encoder.get_num_verbs())
+      nn.Linear(D_hidden_state, encoder.get_num_verbs()),
+      nn.Linear(encoder.get_num_verbs(), 1)
     )
 
     self.nouns_classifier = nn.Sequential(
@@ -95,7 +96,7 @@ class FCGGNN(nn.Module):
 
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
 
-    role_idx = role_idx.cuda()
+    #role_idx = role_idx.cuda()
 
     # repeat single image for max role count a frame can have
     img_features = img_features.expand(self.encoder.max_role_count, img_features.size(0), img_features.size(1))
@@ -116,7 +117,7 @@ class FCGGNN(nn.Module):
 
     #mask out non exisiting roles from max role count a frame can have
     mask = self.encoder.get_adj_matrix_noself(gt_verb)
-    mask = mask.cuda()
+    #mask = mask.cuda()
 
     out = self.ggsnn(input2ggnn, mask)
     logits = self.nouns_classifier(out)
@@ -126,10 +127,11 @@ class FCGGNN(nn.Module):
 
   def __predict_verb(self, img_features, batch_size):
     img_features = torch.nn.functional.relu(img_features)
-    logits = self.verb_classifier(img_features)
-
+    out = self.verb_classifier(img_features)
+    out = out.contiguous().view(batch_size, -1)
+    
     # return predicted verb based on images in batch
-    return logits.contiguous().view(batch_size, -1)
+    return torch.argmax(out, dim=1)
 
 
 
@@ -138,22 +140,29 @@ class FCGGNN(nn.Module):
     batch_size = img_features.size(0)
 
     pred_verb = self.__predict_verb(img_features, batch_size)
-    pred_nouns = self.__predict_nouns(img_features, torch.argmax(pred_verb, dim=1), batch_size)
+    pred_nouns = self.__predict_nouns(img_features, pred_verb, batch_size)
     gt_pred_nouns = self.__predict_nouns(img_features, gt_verb, batch_size)
     
     return pred_verb, pred_nouns, gt_pred_nouns
     #return gt_pred_nouns
 
 
-  def calculate_loss(self, pred_verb, gt_verbs, pred_labels, gt_labels):
+  def calculate_loss(self, pred_verb, gt_verb, pred_labels, gt_labels):
     batch_size = pred_labels.size()[0]
-    criterion = nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
+
+    verb_pred_criterion = nn.CrossEntropyLoss()
+    nouns_pred_criterion = nn.CrossEntropyLoss()
+    gt_pred_criterion = nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
+    
+    verb_loss = verb_pred_criterion(pred_verb, gt_verb)
+    nouns_loss = nouns_pred_criterion(pred_labels, gt_labels)
+    
     
     gt_label_turned = gt_labels.transpose(1,2).contiguous().view(batch_size* self.encoder.max_role_count*3, -1)
-
     pred_labels = pred_labels.contiguous().view(batch_size* self.encoder.max_role_count, -1)
     pred_labels = pred_labels.expand(3, pred_labels.size(0), pred_labels.size(1))
     pred_labels = pred_labels.transpose(0,1)
     pred_labels = pred_labels.contiguous().view(-1, pred_labels.size(-1))
+    gt_loss = gt_pred_criterion(pred_labels, gt_label_turned.squeeze(1)) * 3
 
-    return criterion(pred_labels, gt_label_turned.squeeze(1)) * 3
+    return verb_loss, nouns_loss, gt_loss

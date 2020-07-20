@@ -41,18 +41,19 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       optimizer.zero_grad()
 
       pred_verb, pred_nouns, gt_pred_nouns = model(img, verb)
-      #gt_pred_nouns = model(img, verb)
 
-      loss = model.module.calculate_loss(verb, gt_pred_nouns, nouns)
-      loss.backward()
-
+      verb_loss, nouns_loss, gt_loss = model.module.calculate_loss(pred_verb, verb, pred_nouns, nouns)
+      
+      verb_loss.backward()
+      nouns_loss.backward()
+      gt_loss.backward()
+      
       torch.nn.utils.clip_grad_value_(model.parameters(), 1)
 
       optimizer.step()
-
       
-      top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
-      top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      top1.add_point_both(pred_verb, verb, pred_nouns, nouns, gt_pred_nouns)
+      top5.add_point_both(pred_verb, verb, pred_nouns, nouns, gt_pred_nouns)
       #top1.add_point_noun(verb, gt_pred_nouns, nouns)
       #top5.add_point_noun(verb, gt_pred_nouns, nouns)
       
