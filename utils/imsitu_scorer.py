@@ -78,7 +78,8 @@ class imsitu_scorer():
       new_card = {"verb":0.0, "value":0.0, "value-all":0.0, "gt-value":0.0, "gt-value-all":0.0}
       score_card = new_card
 
-      if torch.equal(pred_verb, verbs[i]):
+      verb_found = False
+      if torch.equal(verbs[i], pred_verb.long()):
         verb_found = True
       
       if verb_found:
@@ -93,9 +94,9 @@ class imsitu_scorer():
         label_id = torch.topk(pred_noun[k], k=self.topk)[1]
         gt_label_id = torch.topk(gt_pred_noun[k], k=self.topk)[1]
         for r in range(0, 3):
-          if label_id == label[r][k]:
+          if torch.equal(label_id, label[r][k]):
             found += 1
-          if gt_label_id == label[r][k]:
+          if torch.equal(gt_label_id, label[r][k]):
             gt_found += 1
         
         if found < (3 * self.topk):

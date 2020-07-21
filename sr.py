@@ -4,6 +4,8 @@ import os
 from sys import float_info
 import matplotlib.pyplot as plt
 
+from tqdm import tqdm
+
 from model import FCGGNN
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
@@ -41,8 +43,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       optimizer.zero_grad()
 
       pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
-
-      verb_loss, nouns_loss, gt_loss = model.module.calculate_loss(pred_verb, pred_nouns, pred_gt_nouns, verb, nouns)
+      verb_loss, nouns_loss, gt_loss = model.calculate_loss(pred_verb, pred_nouns, pred_gt_nouns, verb, nouns)
       
       verb_loss.backward(retain_graph=True)
       nouns_loss.backward(retain_graph=True)
