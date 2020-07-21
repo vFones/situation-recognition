@@ -47,12 +47,17 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       optimizer.zero_grad()
 
       pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
-      verb_loss, nouns_loss, gt_loss = model.module.calculate_loss(pred_verb, pred_nouns, pred_gt_nouns, verb, nouns)
       
-      verb_loss.backward(retain_graph=True)
-      nouns_loss.backward(retain_graph=True)
-      gt_loss.backward(retain_graph=True)
+      pred_verb_h = pred_verb.clone().detach().requires_grad_(True)
+      pred_nouns_h = pred_nouns.clone().detach().requires_grad_(True)
+      pred_gt_nouns_h = pred_gt_nouns.clone().detach().requires_grad_(True)
+
+      verb_loss, nouns_loss, gt_loss = model.calculate_loss(pred_verb_h, pred_nouns_h, pred_gt_nouns_h, verb, nouns)
       
+      verb_loss.backward()
+      nouns_loss.backward()
+      gt_loss.backward()
+     
       torch.nn.utils.clip_grad_value_(model.parameters(), 1)
 
       optimizer.step()
@@ -78,8 +83,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         plt.plot(verb_losses, label='verb loss')
         plt.plot(nouns_losses, label='nouns loss')
         plt.plot(gt_losses, label='gt loss')
-        plt.scatter(e, label='epoch')
-        plt.plot(optimizer.param_groups[0]['lr'], label='learning rate')
+        plt.legend()
         plt.savefig('img/losses.png')
         plt.clf()
     
