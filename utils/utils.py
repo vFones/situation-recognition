@@ -38,6 +38,6 @@ def format_dict(d, s, p):
   '''
   rv = ""
   for (k,v) in d.items():
-    if len(rv) > 0: rv += " , "
-    rv+=p+str(k) + ":" + s.format(v*100)
+    if len(rv) > 0: rv += ", "
+    rv+=p+str(k) + ": " + s.format(v*100)
   return rv

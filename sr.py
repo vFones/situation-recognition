@@ -12,6 +12,9 @@ from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_name, model_saving_name, checkpoint=None):
   model.train()
 
+  verb_lossfn = torch.nn.CrossEntropyLoss()
+  nouns_lossfn = torch.nn.CrossEntropyLoss(ignore_index=encoder.get_num_labels())
+
   verb_losses = []
   nouns_losses = []
   gt_losses = []
@@ -45,14 +48,14 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       nouns = nouns.cuda()
       
       optimizer.zero_grad()
-
       pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
-      
-      pred_verb_h = pred_verb.clone().detach().requires_grad_(True)
-      pred_nouns_h = pred_nouns.clone().detach().requires_grad_(True)
-      pred_gt_nouns_h = pred_gt_nouns.clone().detach().requires_grad_(True)
+  
+      pred_nouns = pred_nouns.clone().detach().requires_grad_(True)
+      pred_gt_nouns = pred_gt_nouns.clone().detach().requires_grad_(True)
 
-      verb_loss, nouns_loss, gt_loss = model.calculate_loss(pred_verb_h, pred_nouns_h, pred_gt_nouns_h, verb, nouns)
+      verb_loss = model.module.verb_loss(pred_verb, verb, verb_lossfn)
+      nouns_loss =  model.module.nouns_loss(pred_nouns, nouns, nouns_lossfn)
+      gt_loss =  model.module.nouns_loss(pred_gt_nouns, nouns, nouns_lossfn)
       
       verb_loss.backward()
       nouns_loss.backward()
@@ -61,7 +64,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       torch.nn.utils.clip_grad_value_(model.parameters(), 1)
 
       optimizer.step()
-      
+
       top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       #top1.add_point_noun(verb, pred_gt_nouns, nouns)

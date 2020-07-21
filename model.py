@@ -145,27 +145,21 @@ class FCGGNN(nn.Module):
     #return gt_pred_nouns
 
 
-  def calculate_loss(self, pred_verb, pred_nouns, pred_gt_nouns, gt_verb, gt_nouns):
+  def verb_loss(self, pred_verb, gt_verb, lossfn):
     batch_size = gt_verb.size()[0]
 
-    verb_pred_criterion = nn.CrossEntropyLoss()
-    nouns_pred_criterion = nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
-    gt_pred_criterion = nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
+    loss = lossfn(pred_verb, gt_verb)
+    return loss
 
-    verb_loss = verb_pred_criterion(pred_verb, gt_verb)
+  def nouns_loss(self, pred_nouns, gt_nouns, lossfn):
+    batch_size = gt_nouns.size()[0]
 
-    gt_label_turned = gt_nouns.transpose(1,2).contiguous().view(batch_size* self.encoder.max_role_count*3, -1)
+    gt_label_turned = gt_nouns.transpose(1,2).contiguous().view(batch_size * self.encoder.max_role_count*3, -1)
 
     pred_nouns = pred_nouns.contiguous().view(batch_size* self.encoder.max_role_count, -1)
     pred_nouns = pred_nouns.expand(3, pred_nouns.size(0), pred_nouns.size(1))
     pred_nouns = pred_nouns.transpose(0,1)
     pred_nouns = pred_nouns.contiguous().view(-1, pred_nouns.size(-1))
-    nouns_loss = nouns_pred_criterion(pred_nouns,  gt_label_turned.squeeze(1)) * 3
+    nouns_loss = lossfn(pred_nouns,  gt_label_turned.squeeze(1)) * 3
 
-    pred_gt_nouns = pred_gt_nouns.contiguous().view(batch_size* self.encoder.max_role_count, -1)
-    pred_gt_nouns = pred_gt_nouns.expand(3, pred_gt_nouns.size(0), pred_gt_nouns.size(1))
-    pred_gt_nouns = pred_gt_nouns.transpose(0,1)
-    pred_gt_nouns = pred_gt_nouns.contiguous().view(-1, pred_gt_nouns.size(-1))
-    gt_loss = gt_pred_criterion(pred_gt_nouns, gt_label_turned.squeeze(1)) * 3
-
-    return verb_loss, nouns_loss, gt_loss
+    return nouns_loss
