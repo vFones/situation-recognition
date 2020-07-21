@@ -12,14 +12,18 @@ from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_name, model_saving_name, checkpoint=None):
   model.train()
 
-  losses = []
+  verb_losses = []
+  nouns_losses = []
+  gt_losses = []
   x_axis = []
   epoch = 0
   total_steps = 0
   
   if checkpoint is not None:
     epoch = checkpoint['epoch']
-    losses = checkpoint['losses']
+    verb_losses = checkpoint['verb_losses']
+    nouns_losses = checkpoint['nouns_losses']
+    gt_losses = checkpoint['gt_losses']    
     model.module.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
@@ -43,7 +47,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       optimizer.zero_grad()
 
       pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
-      verb_loss, nouns_loss, gt_loss = model.calculate_loss(pred_verb, pred_nouns, pred_gt_nouns, verb, nouns)
+      verb_loss, nouns_loss, gt_loss = model.module.calculate_loss(pred_verb, pred_nouns, pred_gt_nouns, verb, nouns)
       
       verb_loss.backward(retain_graph=True)
       nouns_loss.backward(retain_graph=True)
@@ -63,20 +67,26 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         top5_a = top5.get_average_results_both()
         #top1_a = top1.get_average_results_nouns()
         #top5_a = top5.get_average_results_nouns()
-        print('Epoch-{}, loss = {:.2f}, {}, {}'
-          .format(e, loss.item(),
+        print('Epoch-{}, losses = [v-{:.2f}, n-{:.2f}, gt-{:.2f}], {}, {}'
+          .format(e, verb_loss.item(), nouns_loss.item(), gt_loss.item(),
           utils.format_dict(top1_a, '{:.2f}', '1-'),
           utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
-        losses.append(loss.item())
-        plt.plot(losses)
+        verb_losses.append(verb_loss.item())
+        nouns_losses.append(nouns_loss.item())
+        gt_losses.append(gt_loss.item())
+        plt.plot(verb_losses, label='verb loss')
+        plt.plot(nouns_losses, label='nouns loss')
+        plt.plot(gt_losses, label='gt loss')
+        plt.scatter(e, label='epoch')
+        plt.plot(optimizer.param_groups[0]['lr'], label='learning rate')
         plt.savefig('img/losses.png')
         plt.clf()
     
 
     checkpoint = { 
       'epoch': e,
-      'losses': losses,
+      'verb_loss': verb_loss, 'nouns_loss': nouns_loss, 'gt_loss': gt_loss,
       'model_state_dict': model.module.state_dict(),
       'optimizer_state_dict': optimizer.state_dict(),
       'scheduler_state_dict': scheduler.state_dict()
