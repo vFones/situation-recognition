@@ -2,7 +2,6 @@
 PyTorch implementation of GGNN based SR : https://arxiv.org/abs/1708.04320
 GGNN implementation adapted from https://github.com/chingyaoc/ggnn.pytorch
 '''
-
 import torch
 import torch.nn as nn
 import torchvision as tv
@@ -31,10 +30,8 @@ class GGSNN(nn.Module):
   Mode: SelectNode
   Implementation based on https://arxiv.org/abs/1511.05493
   """
-  def __init__(self, n_node, layersize):
+  def __init__(self, layersize):
     super(GGSNN, self).__init__()
-
-    self.n_node = n_node
     #neighbour projection
     self.W_p = nn.Linear(layersize, layersize)
     #weights of update gate
@@ -47,19 +44,21 @@ class GGSNN(nn.Module):
     self.W_h = nn.Linear(layersize, layersize)
     self.U_h = nn.Linear(layersize, layersize)
 
-  def forward(self, init_node, mask):
-
-    hidden_state = init_node
+  def forward(self, hidden_state, mask=None, verb=False):
     for t in range(4):
       # calculating neighbour info
-      neighbours = hidden_state.contiguous().view(mask.size(0), self.n_node, -1)
-      neighbours = neighbours.expand(self.n_node, neighbours.size(0), neighbours.size(1), neighbours.size(2))
-      neighbours = neighbours.transpose(0,1)
-
-      neighbours = neighbours * mask.unsqueeze(-1)
-      neighbours = self.W_p(neighbours)
-      neighbours = torch.sum(neighbours, 2)
-      neighbours = neighbours.contiguous().view(mask.size(0)*self.n_node, -1)
+      if verb:
+        neighbours = hidden_state
+        neighbours = self.W_p(neighbours)
+      else:
+        batch_size = mask.size(0)
+        neighbours = hidden_state.contiguous().view(batch_size, mask.size(1), -1)
+        neighbours = neighbours.expand(mask.size(1), neighbours.size(0), neighbours.size(1), neighbours.size(2))
+        neighbours = neighbours.transpose(0,1)
+        neighbours = neighbours * mask.unsqueeze(-1)
+        neighbours = self.W_p(neighbours)
+        neighbours = torch.sum(neighbours, 2)
+        neighbours = neighbours.contiguous().view(batch_size*neighbours.size(1), -1)
 
       #applying gating
       z_t = torch.sigmoid(self.W_z(neighbours) + self.U_z(hidden_state))
@@ -68,6 +67,7 @@ class GGSNN(nn.Module):
       hidden_state = (1 - z_t) * hidden_state + z_t * h_hat_t
 
     return hidden_state
+
 
 class FCGGNN(nn.Module):
   def __init__(self, encoder, D_hidden_state):
@@ -78,81 +78,102 @@ class FCGGNN(nn.Module):
     self.verb_emb = nn.Embedding(encoder.get_num_verbs(), D_hidden_state)
 
     self.convnet = resnet_modified()
-    self.ggsnn = GGSNN(n_node=encoder.max_role_count, layersize=D_hidden_state)
+    self.ggsnn = GGSNN(layersize=D_hidden_state)
 
     self.verb_classifier = nn.Sequential(
       nn.Dropout(0.5),
-      nn.Linear(D_hidden_state, self.encoder.get_num_verbs())
+      nn.Linear(D_hidden_state, self.encoder.get_num_verbs()),
+      nn.Softmax(dim=1)
     )
 
     self.nouns_classifier = nn.Sequential(
       nn.Dropout(0.5),
-      nn.Linear(D_hidden_state, self.encoder.get_num_labels())
+      nn.Linear(D_hidden_state, self.encoder.get_num_labels()),
+      nn.Softmax(dim=1)
     )
 
 
   def __predict_nouns(self, img_features, gt_verb, batch_size):
-
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
-
     role_idx = role_idx.cuda()
+    role_count = self.encoder.get_max_role_count()
 
     # repeat single image for max role count a frame can have
-    img_features = img_features.expand(self.encoder.max_role_count, img_features.size(0), img_features.size(1))
-
+    img_features = img_features.expand(role_count, img_features.size(0), img_features.size(1))
     img_features = img_features.transpose(0,1)
-    img_features = img_features.contiguous().view(batch_size * self.encoder.max_role_count, -1)
+    img_features = img_features.contiguous().view(batch_size * role_count, -1)
+    # transforming 1, 2048 tensor to 6, 2048
 
     verb_embd = self.verb_emb(gt_verb)
     role_embd = self.role_emb(role_idx)
 
-    role_embd = role_embd.view(batch_size * self.encoder.max_role_count, -1)
+    role_embd = role_embd.view(batch_size * role_count, -1)
 
-    verb_embed_expand = verb_embd.expand(self.encoder.max_role_count, verb_embd.size(0), verb_embd.size(1))
+    verb_embed_expand = verb_embd.expand(role_count, verb_embd.size(0), verb_embd.size(1))
     verb_embed_expand = verb_embed_expand.transpose(0,1)
-    verb_embed_expand = verb_embed_expand.contiguous().view(batch_size * self.encoder.max_role_count, -1)
+    verb_embed_expand = verb_embed_expand.contiguous().view(batch_size * role_count, -1)
 
-    input2ggnn = torch.nn.functional.relu(img_features * role_embd * verb_embed_expand)
+    node = torch.nn.functional.relu(img_features * role_embd * verb_embed_expand)
 
     #mask out non exisiting roles from max role count a frame can have
     mask = self.encoder.get_adj_matrix_noself(gt_verb)
     mask = mask.cuda()
 
-    out = self.ggsnn(input2ggnn, mask)
+    out = self.ggsnn(node, mask=mask, verb=False)
+
     logits = self.nouns_classifier(out)
     # return predicted nouns based on grount truth of images in batch
-    return logits.contiguous().view(batch_size, self.encoder.max_role_count, -1)
+    return logits.contiguous().view(batch_size, role_count, -1)
 
 
   def __predict_verb(self, img_features, batch_size):
+    num_verbs = self.encoder.get_num_verbs()
     img_features = torch.nn.functional.relu(img_features)
-    out = self.verb_classifier(img_features)
-    return out
 
+    verb_class = nn.Linear(img_features.size(1), num_verbs)
+
+    verb = torch.argmax(verb_class(img_features), 1)
+    role_count = self.encoder.get_max_role_count()
+
+    #mask = self.encoder.get_role_ids_batch(verb)
+    #mask = mask.expand(role_count, mask.size(0), mask.size(1))
+    #mask = mask.transpose(0, 1)
+    #mask = mask.contiguous().view(batch_size, num_verbs, -1)
+
+    #mask = mask.cuda()
+    #print("before ggssnn out: ", mask.size(), mask)
+
+    node = img_features.expand(1, batch_size, img_features.size(1))
+    node = node.transpose(0,1)
+    node = node.contiguous().view(batch_size * 1, -1)
+
+    out = self.ggsnn(node, mask=None, verb=True)
+
+    return self.verb_classifier(out)
 
 
   def forward(self, img, gt_verb):
     img_features = self.convnet(img)
     batch_size = img_features.size(0)
-
-    pred_verb = self.__predict_verb(img_features, batch_size)
-    _, verb = torch.max(pred_verb, 1)
-
-    pred_nouns = self.__predict_nouns(img_features, verb, batch_size)
-    gt_pred_nouns = self.__predict_nouns(img_features, gt_verb, batch_size)
     
+    gt_pred_nouns = self.__predict_nouns(img_features, gt_verb, batch_size)
+    pred_verb = self.__predict_verb(img_features, batch_size)
+    pred_nouns = self.__predict_nouns(img_features, torch.argmax(pred_verb, 1), batch_size)
+
     return pred_verb, pred_nouns, gt_pred_nouns
-    #return gt_pred_nouns
 
 
-  def verb_loss(self, pred_verb, gt_verb, lossfn):
+  def verb_loss(self, pred_verb, gt_verb):
     batch_size = gt_verb.size()[0]
+    verb_lossfn = torch.nn.CrossEntropyLoss()
+    loss = verb_lossfn(pred_verb, gt_verb)
 
-    loss = lossfn(pred_verb, gt_verb)
     return loss
 
-  def nouns_loss(self, pred_nouns, gt_nouns, lossfn):
+
+  def nouns_loss(self, pred_nouns, gt_nouns):
     batch_size = gt_nouns.size()[0]
+    nouns_lossfn = torch.nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
 
     gt_label_turned = gt_nouns.transpose(1,2).contiguous().view(batch_size * self.encoder.max_role_count*3, -1)
 
@@ -160,6 +181,7 @@ class FCGGNN(nn.Module):
     pred_nouns = pred_nouns.expand(3, pred_nouns.size(0), pred_nouns.size(1))
     pred_nouns = pred_nouns.transpose(0,1)
     pred_nouns = pred_nouns.contiguous().view(-1, pred_nouns.size(-1))
-    nouns_loss = lossfn(pred_nouns,  gt_label_turned.squeeze(1)) * 3
+
+    nouns_loss = nouns_lossfn(pred_nouns,  gt_label_turned.squeeze(1)) * 3
 
     return nouns_loss
