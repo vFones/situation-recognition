@@ -12,9 +12,7 @@ from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_name, model_saving_name, checkpoint=None):
   model.train()
 
-  verb_lossfn = torch.nn.CrossEntropyLoss()
-  nouns_lossfn = torch.nn.CrossEntropyLoss(ignore_index=encoder.get_num_labels())
-
+  losses = []
   verb_losses = []
   nouns_losses = []
   gt_losses = []
@@ -49,40 +47,35 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       
       optimizer.zero_grad()
       pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
-  
-      pred_nouns = pred_nouns.clone().detach().requires_grad_(True)
-      pred_gt_nouns = pred_gt_nouns.clone().detach().requires_grad_(True)
 
-      verb_loss = model.module.verb_loss(pred_verb, verb, verb_lossfn)
-      nouns_loss =  model.module.nouns_loss(pred_nouns, nouns, nouns_lossfn)
-      gt_loss =  model.module.nouns_loss(pred_gt_nouns, nouns, nouns_lossfn)
+      verb_loss = model.module.verb_loss(pred_verb, verb)
+      nouns_loss =  model.module.nouns_loss(pred_nouns, nouns)
+      gt_loss =  model.module.nouns_loss(pred_gt_nouns, nouns)
       
-      verb_loss.backward()
-      nouns_loss.backward()
-      gt_loss.backward()
+      loss = verb_loss+nouns_loss+gt_loss
+      loss.backward()
      
       torch.nn.utils.clip_grad_value_(model.parameters(), 1)
 
       optimizer.step()
-
+  
       top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
-      #top1.add_point_noun(verb, pred_gt_nouns, nouns)
-      #top5.add_point_noun(verb, pred_gt_nouns, nouns)
       
       if total_steps % 32 == 0:
         top1_a = top1.get_average_results_both()
         top5_a = top5.get_average_results_both()
-        #top1_a = top1.get_average_results_nouns()
-        #top5_a = top5.get_average_results_nouns()
-        print('Epoch-{}, losses = [v-{:.2f}, n-{:.2f}, gt-{:.2f}], {}, {}'
-          .format(e, verb_loss.item(), nouns_loss.item(), gt_loss.item(),
+        print('Epoch-{}, losses = [v-{:.2f}, n-{:.2f}, gt-{:.2f}] total_loss = [{:.2f}], {}, {}'
+         .format(e, loss.item(), verb_loss.item(), nouns_loss.item(), gt_loss.item(),
           utils.format_dict(top1_a, '{:.2f}', '1-'),
           utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
         verb_losses.append(verb_loss.item())
         nouns_losses.append(nouns_loss.item())
         gt_losses.append(gt_loss.item())
+        losses.append(loss.item())
+
+        plt.plot(losses, label='total loss')
         plt.plot(verb_losses, label='verb loss')
         plt.plot(nouns_losses, label='nouns loss')
         plt.plot(gt_losses, label='gt loss')
@@ -94,7 +87,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
     checkpoint = { 
       'epoch': e,
       'verb_loss': verb_loss, 'nouns_loss': nouns_loss, 'gt_loss': gt_loss,
-      'model_state_dict': model.module.state_dict(),
+      'model_state_dict': model.state_dict(),
       'optimizer_state_dict': optimizer.state_dict(),
       'scheduler_state_dict': scheduler.state_dict()
     }
@@ -140,7 +133,6 @@ if __name__ == '__main__':
   parser.add_argument('--evaluate', action='store_true', help='Only use the testing mode')
   parser.add_argument('--test', action='store_true', help='Only use the testing mode')
   parser.add_argument('--model_saving_name', type=str, help='saving name of the outpul model')
-  parser.add_argument('--benchmark', default=False, action='store_true', help='Benchmark batches loading')
 
   parser.add_argument('--dataset_folder', type=str, default='imSitu', help='Location of annotations')
   parser.add_argument('--imgset_dir', type=str, default='resized_256', help='Location of original images')
@@ -266,53 +258,5 @@ if __name__ == '__main__':
 
 
   else:
-    if args.benchmark is False:
-      print('Model training started!')
-      train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, model_name, args.model_saving_name, checkpoint=checkpoint)
-    
-    else:
-      print('Benchmarking, batchsize = {}'.format(args.batch_size))
-      import time
-      import multiprocessing
-      core_number = multiprocessing.cpu_count()
-      best_num_worker = [0, 0]
-      best_time = [99999999, 99999999]
-      print('cpu_count =',core_number)
-
-      def loading_time(num_workers, pin_memory):
-        kwargs = {'num_workers': num_workers, 'pin_memory': pin_memory}
-        train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, **kwargs)
-        
-        start = time.time()
-        for epoch in range(4):
-          for batch_idx, (_, img, verb, labels) in enumerate(train_loader):
-            if batch_idx == 15:
-              break
-            pass
-        end = time.time()
-        print("  Used {} second with num_workers = {}".format(end-start,num_workers))
-        return end-start
-
-      for pin_memory in [False, True]:
-        print("While pin_memory =",pin_memory)
-        for num_workers in range(0, core_number*2+1, 4): 
-          current_time = loading_time(num_workers, pin_memory)
-          if current_time < best_time[pin_memory]:
-            best_time[pin_memory] = current_time
-            best_num_worker[pin_memory] = num_workers
-          else: # assuming its a convex function  
-            if best_num_worker[pin_memory] == 0:
-              the_range = []
-            else:
-              the_range = list(range(best_num_worker[pin_memory] - 3, best_num_worker[pin_memory]))
-            for num_workers in (the_range + list(range(best_num_worker[pin_memory] + 1,best_num_worker[pin_memory] + 4))): 
-              current_time = loading_time(num_workers, pin_memory)
-              if current_time < best_time[pin_memory]:
-                best_time[pin_memory] = current_time
-                best_num_worker[pin_memory] = num_workers
-            break
-
-      if best_time[0] < best_time[1]:
-        print("Best num_workers =", best_num_worker[0], "with pin_memory = False")
-      else:
-        print("Best num_workers =", best_num_worker[1], "with pin_memory = True")
+    print('Model training started!')
+    train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, model_name, args.model_saving_name, checkpoint=checkpoint)
