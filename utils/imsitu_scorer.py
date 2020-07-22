@@ -49,8 +49,6 @@ class imsitu_scorer():
         for r in range(0, 3):
           #print("three annotations so...")
           for j in range(0, self.topk):
-            print(pred_label[j], label[r][k], gt_pred_label[j])
-
             if pred_label[j] == label[r][k]:
               found += 1
             if gt_pred_label[j] == label[r][k]:
