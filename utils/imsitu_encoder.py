@@ -342,7 +342,7 @@ class imsitu_encoder():
 
     return torch.stack(adj_matrix_list).type(torch.FloatTensor)
 
-  def get_verb2role_encoing_batch(self, verb_ids):
+  def get_verb2role_encoding_batch(self, verb_ids):
     matrix_list = []
 
     for id in verb_ids:
