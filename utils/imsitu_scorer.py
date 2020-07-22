@@ -10,23 +10,27 @@ class imsitu_scorer():
 
   def add_point_both(self, pred_verbs, verbs, pred_nouns, labels, gt_pred_nouns):
     batch_size = verbs.size()[0]
+
     for i in range(batch_size):
       pred_verb = pred_verbs[i]
       pred_noun = pred_nouns[i]
-      label = labels[i]
-      verb = verbs[i]
       gt_pred_noun = gt_pred_nouns[i]
-      gt_all_found = False
-      all_found = False
 
-      role_set = self.encoder.get_role_ids(verbs[i])
+      verb = verbs[i]
+      label = labels[i]
+
+      verb_found = False
+      all_found = False
+      gt_all_found = False
+
 
       new_card = {"verb":0.0, "value":0.0, "value-all":0.0, "gt-value":0.0, "gt-value-all":0.0}
       score_card = new_card
 
-      verb_found = False
       pred_verbs_ind = torch.argmax(pred_verbs, 1)
-      if verb == pred_verbs_ind[i]:
+      pred_verb = pred_verbs_ind[i]
+
+      if verb == pred_verb:
         verb_found = True
       
       if verb_found:
@@ -36,37 +40,40 @@ class imsitu_scorer():
       gt_role_list = self.encoder.get_role_ids(verb)
 
       for k in range(gt_role_count):
+
         found = 0
         gt_found = 0
-        _, labels_id = torch.topk(pred_noun[k], self.topk)
-        _, gt_labels_id = torch.topk(gt_pred_noun[k], self.topk)
+        _, pred_label = torch.topk(pred_noun[k], self.topk)
+        _, gt_pred_label = torch.topk(gt_pred_noun[k], self.topk)
         
         for r in range(0, 3):
+          #print("three annotations so...")
           for j in range(0, self.topk):
+            print(pred_label[j], label[r][k], gt_pred_label[j])
 
-            if torch.equal( labels_id[j], label[r][k]):
+            if pred_label[j] == label[r][k]:
               found += 1
-            if torch.equal(gt_labels_id[j], label[r][k]):
+            if gt_pred_label[j] == label[r][k]:
               gt_found += 1
         
-          if found < (3 * self.topk):
-            all_found = False
-          elif found == (3 * self.topk):
-            all_found = True
-            
-          if gt_found < (3 * self.topk):
-            gt_all_found = False
-          elif gt_found == (3 * self.topk):
-            gt_all_found = True
+        if found < (3 * self.topk):
+          all_found = False
+        elif found == (3 * self.topk):
+          all_found = True
+          
+        if gt_found < (3 * self.topk):
+          gt_all_found = False
+        elif gt_found == (3 * self.topk):
+          gt_all_found = True
 
-          if found > 0 and verb_found: score_card["value"] += 1
-          if all_found: score_card["value-all"] += 1
-          if gt_found > 0: score_card["gt-value"] += 1
-          if gt_all_found: score_card["gt-value-all"] += 1
+        if found > 0 and verb_found: score_card["value"] += 1
+        if all_found and verb_found: score_card["value-all"] += 1
+        if k==1 and gt_found > 0: score_card["gt-value"] += 1
+        if k==1 and gt_all_found: score_card["gt-value-all"] += 1
 
-      score_card["gt-value"] /= gt_role_count
       score_card["value"] /= gt_role_count
-     
+      score_card["gt-value"] /= gt_role_count
+
       self.score_cards.append(new_card)
 
 

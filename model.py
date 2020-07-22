@@ -127,21 +127,7 @@ class FCGGNN(nn.Module):
 
 
   def __predict_verb(self, img_features, batch_size):
-    num_verbs = self.encoder.get_num_verbs()
     img_features = torch.nn.functional.relu(img_features)
-
-    verb_class = nn.Linear(img_features.size(1), num_verbs)
-
-    verb = torch.argmax(verb_class(img_features), 1)
-    role_count = self.encoder.get_max_role_count()
-
-    #mask = self.encoder.get_role_ids_batch(verb)
-    #mask = mask.expand(role_count, mask.size(0), mask.size(1))
-    #mask = mask.transpose(0, 1)
-    #mask = mask.contiguous().view(batch_size, num_verbs, -1)
-
-    #mask = mask.cuda()
-    #print("before ggssnn out: ", mask.size(), mask)
 
     node = img_features.expand(1, batch_size, img_features.size(1))
     node = node.transpose(0,1)
@@ -156,9 +142,9 @@ class FCGGNN(nn.Module):
     img_features = self.convnet(img)
     batch_size = img_features.size(0)
     
-    gt_pred_nouns = self.__predict_nouns(img_features, gt_verb, batch_size)
     pred_verb = self.__predict_verb(img_features, batch_size)
     pred_nouns = self.__predict_nouns(img_features, torch.argmax(pred_verb, 1), batch_size)
+    gt_pred_nouns = self.__predict_nouns(img_features, gt_verb, batch_size)
 
     return pred_verb, pred_nouns, gt_pred_nouns
 

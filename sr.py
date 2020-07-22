@@ -66,7 +66,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         top1_a = top1.get_average_results_both()
         top5_a = top5.get_average_results_both()
         print('Epoch-{}, losses = [v-{:.2f}, n-{:.2f}, gt-{:.2f}] total_loss = [{:.2f}], {}, {}'
-         .format(e, loss.item(), verb_loss.item(), nouns_loss.item(), gt_loss.item(),
+         .format(e, verb_loss.item(), nouns_loss.item(), gt_loss.item(), loss.item(),
           utils.format_dict(top1_a, '{:.2f}', '1-'),
           utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
@@ -115,12 +115,9 @@ def eval(model, dev_loader, encoder):
       nouns = nouns.cuda()
 
       pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
-      #pred_gt_nouns = model(img, verb)
 
       top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
       top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
-      #top1.add_point_noun(verb, pred_gt_nouns, nouns)
-      #top5.add_point_noun(verb, pred_gt_nouns, nouns)
 
   return top1, top5, 0
 
@@ -226,11 +223,10 @@ if __name__ == '__main__':
 
     top1_avg = top1.get_average_results_both()
     top5_avg = top5.get_average_results_both()
-    #top1_avg = top1.get_average_results_nouns()
-    #top5_avg = top5.get_average_results_nouns()
+    
 
     avg_score = top1_avg['verb'] + top1_avg['value'] + top1_avg['value-all'] + top5_avg['verb'] + \
-                top5_avg['value'] + top5_avg['value-all'] + top5_avg['value*'] + top5_avg['value-all*']
+                top5_avg['value'] + top5_avg['value-all'] + top1_avg['gt-value'] + top1_avg['gt-value-all']
     avg_score /= 8
 
     print('Dev average :{:.2f} {} {}'
@@ -244,11 +240,9 @@ if __name__ == '__main__':
 
     top1_avg = top1.get_average_results_both()
     top5_avg = top5.get_average_results_both()
-    #top1_avg = top1.get_average_results_nouns()
-    #top5_avg = top5.get_average_results_nouns()
 
     avg_score = top1_avg['verb'] + top1_avg['value'] + top1_avg['value-all'] + top5_avg['verb'] + \
-                top5_avg['value'] + top5_avg['value-all'] + top5_avg['value*'] + top5_avg['value-all*']
+                top5_avg['value'] + top5_avg['value-all'] + top1_avg['gt-value'] + top1_avg['gt-value-all']
     avg_score /= 8
 
     print ('Test average :{:.2f} {} {}'
