@@ -98,7 +98,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
     print ('**** model saved ****')
 
-    scheduler.step(loss)
+    scheduler.step()
     
 def eval(model, dev_loader, encoder):
   model.eval()
@@ -220,8 +220,8 @@ if __name__ == '__main__':
   elif args.optim == 'RMSPROP':
     optimizer = torch.optim.RMSprop(model.parameters(), lr=args.lr, alpha=0.9, momentum=0.9)
   
-  #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.steplr, gamma=args.decay)
-  scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.steplr, gamma=args.decay)
+  #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
   
   if args.evaluate:
     top1, top5, val_loss = eval(model, dev_loader, encoder)
