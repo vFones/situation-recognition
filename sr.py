@@ -98,7 +98,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
     print ('**** model saved ****')
 
-    scheduler.step()
+    scheduler.step(loss)
     
 def eval(model, dev_loader, encoder):
   model.eval()
@@ -209,14 +209,19 @@ if __name__ == '__main__':
   
   if args.optim is None:
     raise Exception('no optimizer selected')
+  elif args.optim == 'ADAGRAD':
+    optimizer = torch.optim.Adagrad(model.parameters(), lr=args.lr)
   elif args.optim == 'SDG':
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+  elif args.optim == 'ADADELTA':
+    optimizer = torch.optim.Adadelta(model.parameters(), lr=args.lr)
   elif args.optim == 'ADAMAX':
     optimizer = torch.optim.Adamax(model.parameters(), lr=args.lr)
   elif args.optim == 'RMSPROP':
     optimizer = torch.optim.RMSprop(model.parameters(), lr=args.lr, alpha=0.9, momentum=0.9)
   
-  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.steplr, gamma=args.decay)
+  #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.steplr, gamma=args.decay)
+  scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
   
   if args.evaluate:
     top1, top5, val_loss = eval(model, dev_loader, encoder)
