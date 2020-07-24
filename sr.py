@@ -12,11 +12,9 @@ from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_name, model_saving_name, checkpoint=None):
   model.train()
 
-  losses = []
   verb_losses = []
   nouns_losses = []
   gt_losses = []
-  x_axis = []
   epoch = 0
   total_steps = 0
   
@@ -25,7 +23,10 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
     verb_losses = checkpoint['verb_losses']
     nouns_losses = checkpoint['nouns_losses']
     gt_losses = checkpoint['gt_losses']    
-    model.module.load_state_dict(checkpoint['model_state_dict'])
+    if torch.cuda.is_available():
+      model.module.load_state_dict(checkpoint['model_state_dict'])
+    else:
+      model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
@@ -41,17 +42,24 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
     for i, (_, img, verb, nouns) in enumerate(train_loader):
       total_steps += 1
 
-      img = img.cuda()
-      verb = verb.cuda()
-      nouns = nouns.cuda()
+      if torch.cuda.is_available():
+        img = img.cuda()
+        verb = verb.cuda()
+        nouns = nouns.cuda()
       
       optimizer.zero_grad()
       pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
 
-      verb_loss = model.module.verb_loss(pred_verb, verb)
-      nouns_loss =  model.module.nouns_loss(pred_nouns, nouns)
-      gt_loss =  model.module.nouns_loss(pred_gt_nouns, nouns)
+      if torch.cuda.is_available():
+        verb_loss = model.module.verb_loss(pred_verb, verb)
+        nouns_loss =  model.module.nouns_loss(pred_nouns, nouns)
+        gt_loss =  model.module.nouns_loss(pred_gt_nouns, nouns)
+      else:
+        verb_loss = model.verb_loss(pred_verb, verb)
+        nouns_loss =  model.nouns_loss(pred_nouns, nouns)
+        gt_loss =  model.nouns_loss(pred_gt_nouns, nouns)
       
+
       loss = verb_loss+nouns_loss+gt_loss
       loss.backward()
      
@@ -65,20 +73,18 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       if total_steps % 32 == 0:
         top1_a = top1.get_average_results_both()
         top5_a = top5.get_average_results_both()
-        print('Epoch-{}, losses = [v-{:.2f}, n-{:.2f}, gt-{:.2f}] total_loss = [{:.2f}], {}, {}'
-         .format(e, verb_loss.item(), nouns_loss.item(), gt_loss.item(), loss.item(),
+        print('Epoch-{}, losses = [v-{:.2f}, n-{:.2f}, gt-{:.2f}], {}, {}'
+         .format(e, verb_loss.item(), nouns_loss.item(), gt_loss.item(),
           utils.format_dict(top1_a, '{:.2f}', '1-'),
           utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
         verb_losses.append(verb_loss.item())
         nouns_losses.append(nouns_loss.item())
         gt_losses.append(gt_loss.item())
-        losses.append(loss.item())
 
-        plt.plot(losses, label='total loss')
-        plt.plot(verb_losses, label='verb loss')
-        plt.plot(nouns_losses, label='nouns loss')
-        plt.plot(gt_losses, label='gt loss')
+        plt.plot(verb_losses, label='verb losses')
+        plt.plot(nouns_losses, label='nouns losses')
+        plt.plot(gt_losses, label='gt losses')
         plt.legend()
         plt.savefig('img/losses.png')
         plt.clf()
@@ -86,11 +92,15 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
     checkpoint = { 
       'epoch': e,
-      'verb_loss': verb_loss, 'nouns_loss': nouns_loss, 'gt_loss': gt_loss,
+      'verb_losses': verb_losses,
+      'nouns_losses': nouns_losses,
+      'gt_losses': gt_losses,
       'model_state_dict': model.state_dict(),
       'optimizer_state_dict': optimizer.state_dict(),
       'scheduler_state_dict': scheduler.state_dict()
     }
+    if torch.cuda.is_available():
+      checkpoint.update('model_state_dict', model.module.state_dict())
       
     torch.save(checkpoint, 'trained_models' +
                 '/{}_{}.model'.format( model_name, model_saving_name)
@@ -110,9 +120,10 @@ def eval(model, dev_loader, encoder):
 
     for i, (img_id, img, verb, nouns) in enumerate(dev_loader):
 
-      img = img.cuda()
-      verb = verb.cuda()
-      nouns = nouns.cuda()
+      if torch.cuda.is_available():
+        img = img.cuda()
+        verb = verb.cuda()
+        nouns = nouns.cuda()
 
       pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
 
@@ -153,12 +164,14 @@ if __name__ == '__main__':
 
   n_epoch = args.epochs
 
+  with open(os.path.join(args.dataset_folder, 'train.json'), 'r') as f:
+    encoder_json = json.load(f)
+  
   with open(os.path.join(args.dataset_folder, args.train_file), 'r') as f:
     train_json = json.load(f)
 
-
   if not os.path.isfile('./encoder'):
-    encoder = imsitu_encoder.imsitu_encoder(train_json)
+    encoder = imsitu_encoder.imsitu_encoder(encoder_json)
     torch.save(encoder, 'encoder')
   else:
     print("Loading encoded file")
@@ -185,10 +198,11 @@ if __name__ == '__main__':
   checkpoint = None
 
 
-  print('Using', torch.cuda.device_count(), 'GPUs!')
   model = FCGGNN(encoder, D_hidden_state=2048)
-  model = torch.nn.DataParallel(model)
-  model.cuda()
+  if torch.cuda.is_available():
+    print('Using', torch.cuda.device_count(), 'GPUs!')
+    model = torch.nn.DataParallel(model)
+    model.cuda()
 
   torch.manual_seed(args.seed)
   torch.backends.cudnn.benchmark = True
@@ -209,12 +223,12 @@ if __name__ == '__main__':
   
   if args.optim is None:
     raise Exception('no optimizer selected')
-  elif args.optim == 'ADAGRAD':
-    optimizer = torch.optim.Adagrad(model.parameters(), lr=args.lr)
-  elif args.optim == 'SDG':
+ if args.optim == 'SDG':
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
   elif args.optim == 'ADADELTA':
     optimizer = torch.optim.Adadelta(model.parameters(), lr=args.lr)
+  elif args.optim == 'ADAGRAD':
+    optimizer = torch.optim.Adagrad(model.parameters(), lr=args.lr)
   elif args.optim == 'ADAMAX':
     optimizer = torch.optim.Adamax(model.parameters(), lr=args.lr)
   elif args.optim == 'RMSPROP':

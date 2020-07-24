@@ -93,7 +93,8 @@ class FCGGNN(nn.Module):
 
   def __predict_nouns(self, img_features, gt_verb, batch_size):
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
-    role_idx = role_idx.cuda()
+    if torch.cuda.is_available():
+      role_idx = role_idx.cuda()
     role_count = self.encoder.get_max_role_count()
 
     # repeat single image for max role count a frame can have
@@ -115,7 +116,8 @@ class FCGGNN(nn.Module):
 
     #mask out non exisiting roles from max role count a frame can have
     mask = self.encoder.get_adj_matrix_noself(gt_verb)
-    mask = mask.cuda()
+    if torch.cuda.is_available():
+      mask = mask.cuda()
 
     out = self.ggsnn(node, mask=mask, verb=False)
 
