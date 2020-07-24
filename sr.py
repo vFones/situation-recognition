@@ -223,7 +223,7 @@ if __name__ == '__main__':
   
   if args.optim is None:
     raise Exception('no optimizer selected')
- if args.optim == 'SDG':
+  elif args.optim == 'SDG':
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
   elif args.optim == 'ADADELTA':
     optimizer = torch.optim.Adadelta(model.parameters(), lr=args.lr)
