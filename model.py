@@ -6,14 +6,32 @@ import torch
 import torch.nn as nn
 import torchvision as tv
 
-class resnext_modified(nn.Module):
-  def __init__(self):
-    super(resnext_modified, self).__init__()
-    self.resnext = tv.models.resnext101_32x8d(pretrained=True)
-    self.resnext.fc = nn.Identity()
 
+class verbsnet(nn.Module):
+  def __init__(self, encoder):
+    super(verbsnet, self).__init__()
+    self.resnet152 = tv.models.resnet152(pretrained=True)
+    for param in self.resnet152.parameters():
+      param.requires_grad = False
+    num_ftrs = self.resnet152.fc.in_features
+    self.resnet152.fc = nn.Linear(num_ftrs, encoder.get_num_verbs())
+  
   def forward(self, x):
-    return self.resnext(x)
+    return self.resnet152(x)
+
+
+class rolesnounsnet(nn.Module):
+  def __init__(self, encoder):
+    super(rolesnounsnet, self).__init__()
+    self.resnet152 = tv.models.resnet152(pretrained=True)
+    for param in self.resnet152.parameters():
+      param.requires_grad = False
+    num_ftrs = self.resnet152.fc.in_features
+    self.resnet152.fc = nn.Linear(num_ftrs, encoder.get_num_roles())
+  
+  def forward(self, x):
+    return self.resnet152(x)
+
 
 class resnet_modified(nn.Module):
   def __init__(self):
