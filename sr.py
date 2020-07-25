@@ -33,7 +33,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
-  for e in range(epoch, max_epoch):
+  for e in range(epoch, max_epoch+1):
     print('Epoch-{}, lr: {}'.format(
         e, 
         optimizer.param_groups[0]['lr']
@@ -60,9 +60,11 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         gt_loss =  model.nouns_loss(pred_gt_nouns, nouns)
       
 
-      loss = verb_loss+nouns_loss+gt_loss
+      loss = nouns_loss+gt_loss
+
+      verb_loss.backward(retain_graph=True)
       loss.backward()
-     
+
       torch.nn.utils.clip_grad_value_(model.parameters(), 1)
 
       optimizer.step()
@@ -91,7 +93,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
     
 
     checkpoint = { 
-      'epoch': e,
+      'epoch': e+1,
       'verb_losses': verb_losses,
       'nouns_losses': nouns_losses,
       'gt_losses': gt_losses,
@@ -100,7 +102,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
       'scheduler_state_dict': scheduler.state_dict()
     }
     if torch.cuda.is_available():
-      checkpoint.update('model_state_dict', model.module.state_dict())
+      checkpoint.update({'model_state_dict': model.module.state_dict()})
       
     torch.save(checkpoint, 'trained_models' +
                 '/{}_{}.model'.format( model_name, model_saving_name)
@@ -108,7 +110,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
     print ('**** model saved ****')
 
-    scheduler.step()
+    scheduler.step(verb_loss)
     
 def eval(model, dev_loader, encoder):
   model.eval()
@@ -234,8 +236,8 @@ if __name__ == '__main__':
   elif args.optim == 'RMSPROP':
     optimizer = torch.optim.RMSprop(model.parameters(), lr=args.lr, alpha=0.9, momentum=0.9)
   
-  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.steplr, gamma=args.decay)
-  #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+  #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.steplr, gamma=args.decay)
+  scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
   
   if args.evaluate:
     top1, top5, val_loss = eval(model, dev_loader, encoder)
