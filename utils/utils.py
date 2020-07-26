@@ -11,7 +11,11 @@ def load_net(fname, net_list):
     dict = checkpoint['model_state_dict']
     
     try:
-      for k, v in net_list[i].module.state_dict().items():
+      if torch.cuda.is_available():
+        items = net_list[i].module.state_dict().items()
+      else:
+        items = net_list[i].state_dict().items()
+      for k, v in items:
         if k in dict:
           param = torch.from_numpy(np.asarray(dict[k].cpu()))
           v.copy_(param)
