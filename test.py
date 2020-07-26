@@ -22,14 +22,14 @@ if __name__ == '__main__':
     encoder = torch.load('encoder')
 
   train_set = imsitu_loader.imsitu_loader('resized_256', overfitting, encoder, encoder.train_transform)
-  train_loader = torch.utils.data.DataLoader(train_set, batch_size=1, shuffle=False, num_workers=0)
+  train_loader = torch.utils.data.DataLoader(train_set, batch_size=5, shuffle=False, num_workers=0)
 
   model = FCGGNN(encoder, D_hidden_state=2048)
   
-  optimizer = torch.optim.SGD(model.parameters(), lr=1e-2, momentum=0.9)
-  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
+  optimizer = torch.optim.SGD(model.parameters(), lr=2e-2, momentum=0.9)
+  scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[10, 35, 50], gamma=0.1)
 
-  train(model, train_loader, train_loader, optimizer, scheduler, 40, encoder, 'train_full', 'yo', checkpoint=None)
+  train(model, train_loader, train_loader, optimizer, scheduler, 60, encoder, 'train_full', 'yo', checkpoint=None)
 
   
   #top1.add_point_both(pred_verb, verb, pred_nouns, nouns, gt_pred_nouns)

@@ -1,1 +1,88 @@
-{"glaring_215.jpg": {"frames": [{"place": "n04215402", "perceiver": "", "agent": "n10287213"}, {"place": "n08613733", "perceiver": "", "agent": "n10287213"}, {"place": "n08613733", "perceiver": "", "agent": "n10287213"}], "verb": "glaring"}}
+{
+  "glaring_215.jpg": {
+    "frames": [{
+      "place": "n04215402",
+      "perceiver": "",
+      "agent": "n10287213"
+    }, {
+      "place": "n08613733",
+      "perceiver": "",
+      "agent": "n10287213"
+    }, {
+      "place": "n08613733",
+      "perceiver": "",
+      "agent": "n10287213"
+    }],
+    "verb": "glaring"
+  },
+  "operating_56.jpg": {
+    "frames": [{
+      "item": "n03429288",
+      "tool": "n05564590",
+      "place": "n08613733",
+      "agent": "n09632518"
+    }, {
+      "item": "n02958343",
+      "tool": "n05564590",
+      "place": "n08613593",
+      "agent": "n10287213"
+    }, {
+      "item": "n03944672",
+      "tool": "n03626014",
+      "place": "UNK",
+      "agent": "n10287213"
+    }],
+    "verb": "operating"
+  },
+  "talking_90.jpg": {
+    "frames": [{
+      "listener": "n09827683",
+      "place": "n03518445",
+      "agent": "n10332385"
+    }, {
+      "listener": "n09827683",
+      "place": "n08588294",
+      "agent": "n10787470"
+    }, {
+      "listener": "n10332385",
+      "place": "n04379243",
+      "agent": "n10714465"
+    }],
+    "verb": "talking"
+  },
+  "slipping_66.jpg": {
+    "frames": [{
+      "destination": "n09225146",
+      "place": "n08613733",
+      "agent": "n02391049"
+    }, {
+      "destination": "n14845743",
+      "place": "n09411430",
+      "agent": "n02391049"
+    }, {
+      "destination": "n09334396",
+      "place": "n09217230",
+      "agent": "n10287213"
+    }],
+    "verb": "slipping"
+  },
+  "patting_236.jpg": {
+    "frames": [{
+      "item": "n01503061",
+      "tool": "n05566504",
+      "place": "",
+      "agent": "n10129825"
+    }, {
+      "item": "n07644967",
+      "tool": "n05566504",
+      "place": "",
+      "agent": "n10129825"
+    }, {
+      "item": "UNK",
+      "tool": "n05566504",
+      "place": "",
+      "agent": "n10084295"
+    }],
+    "verb": "patting"
+  }
+}
