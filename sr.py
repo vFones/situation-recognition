@@ -13,7 +13,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   model.train()
 
   verb_losses = []
-  nouns_losses = []
+  #nouns_losses = []
   gt_losses = []
   epoch = 0
   total_steps = 0
@@ -21,7 +21,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
   if checkpoint is not None:
     epoch = checkpoint['epoch']
     verb_losses = checkpoint['verb_losses']
-    nouns_losses = checkpoint['nouns_losses']
+    #nouns_losses = checkpoint['nouns_losses']
     gt_losses = checkpoint['gt_losses']    
     if torch.cuda.is_available():
       model.module.load_state_dict(checkpoint['model_state_dict'])
@@ -48,44 +48,51 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         nouns = nouns.cuda()
       
       optimizer.zero_grad()
-      pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
+      pred_verb, pred_gt_nouns = model(img, verb)
+      
+      model.eval()
+      _, pred_nouns = model(img, torch.argmax(pred_verb, 1))
+      model.train()
 
       if torch.cuda.is_available():
         verb_loss = model.module.verb_loss(pred_verb, verb)
-        nouns_loss =  model.module.nouns_loss(pred_nouns, nouns)
+        #nouns_loss =  model.module.nouns_loss(pred_nouns, nouns)
         gt_loss =  model.module.nouns_loss(pred_gt_nouns, nouns)
       else:
         verb_loss = model.verb_loss(pred_verb, verb)
-        nouns_loss =  model.nouns_loss(pred_nouns, nouns)
+        #nouns_loss =  model.nouns_loss(pred_nouns, nouns)
         gt_loss =  model.nouns_loss(pred_gt_nouns, nouns)
       
 
-      loss = nouns_loss+gt_loss
-
-      verb_loss.backward(retain_graph=True)
+      loss = verb_loss+gt_loss
       loss.backward()
 
-      torch.nn.utils.clip_grad_value_(model.parameters(), 1)
+      torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
 
       optimizer.step()
   
       top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       
-      if total_steps % 32 == 0:
+      if torch.cuda.is_available():
+        freq = 32
+      else:
+        freq = 1
+
+      if total_steps % freq == 0:
         top1_a = top1.get_average_results_both()
         top5_a = top5.get_average_results_both()
-        print('Epoch-{}, losses = [v-{:.2f}, n-{:.2f}, gt-{:.2f}], {}, {}'
-         .format(e, verb_loss.item(), nouns_loss.item(), gt_loss.item(),
+        print('Epoch-{}, losses = [v-{:.2f}, gt-{:.2f}], {}, {}'
+         .format(e, verb_loss.item(), gt_loss.item(),
           utils.format_dict(top1_a, '{:.2f}', '1-'),
           utils.format_dict(top5_a,'{:.2f}', '5-'))
         )
         verb_losses.append(verb_loss.item())
-        nouns_losses.append(nouns_loss.item())
+        #nouns_losses.append(nouns_loss.item())
         gt_losses.append(gt_loss.item())
 
         plt.plot(verb_losses, label='verb losses')
-        plt.plot(nouns_losses, label='nouns losses')
+        #plt.plot(nouns_losses, label='nouns losses')
         plt.plot(gt_losses, label='gt losses')
         plt.legend()
         plt.savefig('img/losses.png')
@@ -95,7 +102,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
     checkpoint = { 
       'epoch': e+1,
       'verb_losses': verb_losses,
-      'nouns_losses': nouns_losses,
+      #'nouns_losses': nouns_losses,
       'gt_losses': gt_losses,
       'model_state_dict': model.state_dict(),
       'optimizer_state_dict': optimizer.state_dict(),
@@ -110,7 +117,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
 
     print ('**** model saved ****')
 
-    scheduler.step(verb_loss)
+    scheduler.step()
     
 def eval(model, dev_loader, encoder):
   model.eval()
@@ -129,8 +136,8 @@ def eval(model, dev_loader, encoder):
 
       pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
 
-      top1.add_point_both(pred_verb, verb, pred_nouns, nouns)
-      top5.add_point_both(pred_verb, verb, pred_nouns, nouns)
+      top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
+      top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
 
   return top1, top5, 0
 
@@ -227,6 +234,8 @@ if __name__ == '__main__':
     raise Exception('no optimizer selected')
   elif args.optim == 'SDG':
     optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=0.9)
+  elif args.optim == 'ADAM':
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
   elif args.optim == 'ADADELTA':
     optimizer = torch.optim.Adadelta(model.parameters(), lr=args.lr)
   elif args.optim == 'ADAGRAD':
@@ -236,8 +245,8 @@ if __name__ == '__main__':
   elif args.optim == 'RMSPROP':
     optimizer = torch.optim.RMSprop(model.parameters(), lr=args.lr, alpha=0.9, momentum=0.9)
   
-  #scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.steplr, gamma=args.decay)
-  scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
+  scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=args.steplr, gamma=args.decay)
+  #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, 'min')
   
   if args.evaluate:
     top1, top5, val_loss = eval(model, dev_loader, encoder)
