@@ -27,7 +27,7 @@ class rolesnounsnet(nn.Module):
     for param in self.resnet152.parameters():
       param.requires_grad = False
     num_ftrs = self.resnet152.fc.in_features
-    self.resnet152.fc = nn.Linear(num_ftrs, encoder.get_num_roles())
+    self.resnet152.fc = nn.Linear(num_ftrs, encoder.get_max_role_count())
   
   def forward(self, x):
     return self.resnet152(x)
@@ -161,10 +161,10 @@ class FCGGNN(nn.Module):
     batch_size = img_features.size(0)
     
     pred_verb = self.__predict_verb(img_features, batch_size)
-    pred_nouns = self.__predict_nouns(img_features, torch.argmax(pred_verb, 1), batch_size)
+    #pred_nouns = self.__predict_nouns(img_features, torch.argmax(pred_verb, 1), batch_size)
     gt_pred_nouns = self.__predict_nouns(img_features, gt_verb, batch_size)
 
-    return pred_verb, pred_nouns, gt_pred_nouns
+    return pred_verb, gt_pred_nouns #pred_nouns#, gt_pred_nouns
 
 
   def verb_loss(self, pred_verb, gt_verb):
