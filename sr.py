@@ -143,6 +143,7 @@ def eval(model, dev_loader, encoder):
 
 if __name__ == '__main__':
   import argparse
+  torch.multiprocessing.set_start_method('spawn')
   parser = argparse.ArgumentParser(description='Situation recognition GGNN. Training, evaluation and prediction.')
   parser.add_argument('--resume_training', action='store_true', help='Resume training from the model [resume_model]')
   parser.add_argument('--resume_model', type=str, default='', help='The model we resume')

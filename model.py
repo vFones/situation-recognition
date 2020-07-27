@@ -7,32 +7,6 @@ import torch.nn as nn
 import torchvision as tv
 
 
-class verbsnet(nn.Module):
-  def __init__(self, encoder):
-    super(verbsnet, self).__init__()
-    self.resnet152 = tv.models.resnet152(pretrained=True)
-    for param in self.resnet152.parameters():
-      param.requires_grad = False
-    num_ftrs = self.resnet152.fc.in_features
-    self.resnet152.fc = nn.Linear(num_ftrs, encoder.get_num_verbs())
-  
-  def forward(self, x):
-    return self.resnet152(x)
-
-
-class rolesnounsnet(nn.Module):
-  def __init__(self, encoder):
-    super(rolesnounsnet, self).__init__()
-    self.resnet152 = tv.models.resnet152(pretrained=True)
-    for param in self.resnet152.parameters():
-      param.requires_grad = False
-    num_ftrs = self.resnet152.fc.in_features
-    self.resnet152.fc = nn.Linear(num_ftrs, encoder.get_max_role_count())
-  
-  def forward(self, x):
-    return self.resnet152(x)
-
-
 class resnet_modified(nn.Module):
   def __init__(self):
     super(resnet_modified, self).__init__()
@@ -111,8 +85,6 @@ class FCGGNN(nn.Module):
 
   def __predict_nouns(self, img_features, gt_verb, batch_size):
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
-    if torch.cuda.is_available():
-      role_idx = role_idx.cuda()
     role_count = self.encoder.get_max_role_count()
 
     # repeat single image for max role count a frame can have
@@ -134,8 +106,6 @@ class FCGGNN(nn.Module):
 
     #mask out non exisiting roles from max role count a frame can have
     mask = self.encoder.get_adj_matrix_noself(gt_verb)
-    if torch.cuda.is_available():
-      mask = mask.cuda()
 
     out = self.ggsnn(node, mask=mask, verb=False)
 
