@@ -7,12 +7,6 @@ import json
 class imsitu_encoder():
   def __init__(self, train_set):
     # json structure -> {<img_name>:{frames:[{<role1>:<label1>, ...},{}...], verb:<verb1>}}
-    print('imsitu encoder initialization started.')
-    if torch.cuda.is_available():
-      self.device = 'cuda'
-      print("using cuda devices")
-    else:
-      self.device = 'cpu'
 
     self.verb_list = []
     self.role_list = []
@@ -122,7 +116,7 @@ class imsitu_encoder():
       for i in range(padding_count):
         role_verb.append(len(self.role_list))
 
-      roles_to_verb_list.append(torch.tensor(role_verb, device=self.device))
+      roles_to_verb_list.append(torch.tensor(role_verb))
 
     self.roles_to_verb_tensor_list = torch.stack(roles_to_verb_list)
     self.verb2role_encoding = self.get_verb2role_encoding()
@@ -145,7 +139,7 @@ class imsitu_encoder():
       for i in range(padding_count):
         role_embedding_verb.append(0)
 
-      verb2role_embedding_list.append(torch.tensor(role_embedding_verb, device=self.device))
+      verb2role_embedding_list.append(torch.tensor(role_embedding_verb))
 
     return verb2role_embedding_list
 
@@ -219,7 +213,7 @@ class imsitu_encoder():
 
   def get_agent_place_ids_batch(self, batch_size):
     role_batch_list = []
-    agent_place = torch.tensor([self.role_list.index('agent'),self.role_list.index('place')],device=self.device)
+    agent_place = torch.tensor([self.role_list.index('agent'),self.role_list.index('place')])
     for i in range(batch_size):
       role_batch_list.append(agent_place)
 
@@ -246,7 +240,7 @@ class imsitu_encoder():
       for i in range(role_padding_count):
         label_id_list.append(len(self.label_list))
 
-      all_frame_id_list.append(torch.tensor(label_id_list,device=self.device))
+      all_frame_id_list.append(torch.tensor(label_id_list))
 
     labels = torch.stack(all_frame_id_list,0)
 
@@ -278,7 +272,7 @@ class imsitu_encoder():
       else:
         agent_id_list.append(len(self.agent_label_list))
 
-    labels = torch.tensor(agent_id_list, device=self.device)
+    labels = torch.tensor(agent_id_list)
 
     return labels
 
@@ -305,7 +299,7 @@ class imsitu_encoder():
       else:
         place_id_list.append(len(self.place_label_list))
 
-    labels = torch.tensor(place_id_list, device=self.device)
+    labels = torch.tensor(place_id_list)
 
     return labels
 
@@ -345,7 +339,7 @@ class imsitu_encoder():
         adj[cur_idx][cur_idx] = 1
       adj_matrix_list.append(adj)
 
-    stack =  torch.stack(adj_matrix_list).type(torch.FloatTensor).to(device=self.device)
+    stack =  torch.stack(adj_matrix_list).type(torch.FloatTensor)
     return stack
 
   def get_verb2role_encoding_batch(self, verb_ids):

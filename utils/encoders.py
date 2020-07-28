@@ -119,10 +119,10 @@ if __name__ == '__main__':
   tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
   bert_model = BertModel.from_pretrained('bert-base-uncased')
   with torch.no_grad():
-    one = torch.LongTensor(tokenizer.encode("Ciao fra")).unsqueeze(0)
+    one = torch.LongTensor(tokenizer.encode("Ciao")).unsqueeze(0)
     out = bert_model(one)[0][0]
 
-    two = torch.LongTensor(tokenizer.encode("Ciao bro")).unsqueeze(0)
+    two = torch.LongTensor(tokenizer.encode("Ciao 1")).unsqueeze(0)
     out2 = bert_model(two)[0][0]
     
     print(out, out.size())
