@@ -8,12 +8,14 @@ class imsitu_scorer():
     self.nref = nref
     self.encoder = encoder
 
-  def add_point_both(self, pred_verbs, verbs, pred_roles_nouns, roles_nouns, gt_pred_roles_nouns):
+  def add_point_both(self, pred_verbs, verbs,
+                           pred_roles_nouns, roles_nouns, gt_pred_roles_nouns):
     batch_size = verbs.size()[0]
 
     for i in range(batch_size):
       if self.topk == 1:
-        new_card = {"verb":0.0, "value":0.0, "value-all":0.0, "gt-value":0.0, "gt-value-all":0.0}
+        new_card = {"verb":0.0, "value":0.0, "value-all":0.0,
+                    "gt-value":0.0, "gt-value-all":0.0}
       else:
         new_card = {"verb":0.0, "value":0.0, "value-all":0.0}
 
@@ -34,13 +36,11 @@ class imsitu_scorer():
         found = 0
         gt_found = 0
 
-        got_verb = False
         all_found = False
         gt_all_found = False
 
         if pred_verb_idx[k] == verb:
           new_card["verb"] += 1
-          got_verb = True
         
         #for all roles associated to verb
         for r in range(0, gt_roles_count):
@@ -52,11 +52,11 @@ class imsitu_scorer():
         if found >= gt_roles_count:
           all_found = True
 
-        if found > 0 and got_verb: new_card["value"] += 1
-        if all_found and got_verb: new_card["value-all"] += 1
+        if found > 0: new_card["value"] += 1
+        if all_found: new_card["value-all"] += 1
       
-      _, gt_pred_role_noun_idx = torch.topk(gt_pred_roles_nouns, 3)
       if self.topk == 1:
+        _, gt_pred_role_noun_idx = torch.topk(gt_pred_roles_nouns, 1)
         for r in range(0, gt_roles_count):
           #for all nouns in three annotations
           for n in range(0, 3):
@@ -69,6 +69,8 @@ class imsitu_scorer():
         if gt_found > 0: new_card["gt-value"] += 1
         if gt_all_found: new_card["gt-value-all"] += 1
 
+      new_card["value"] /= self.topk
+      new_card["value-all"] /= self.topk
       self.score_cards.append(new_card)
 
 
