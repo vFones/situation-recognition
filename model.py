@@ -10,11 +10,17 @@ import torchvision as tv
 class resnet_modified(nn.Module):
   def __init__(self):
     super(resnet_modified, self).__init__()
-    self.resnet = tv.models.resnet152(pretrained=True)
-    self.resnet.fc = nn.Identity()
+    self.resnet = tv.models.resnet152(pretrained=True,
+                                      progress=False)
+    for param in self.resnet.parameters():
+      param.requires_grad = False
+    num_ftrs = self.resnet.fc.in_features
+
+    self.resnet.fc = nn.Linear(num_ftrs, num_ftrs)
   
   def forward(self, x):
     return self.resnet(x)
+
 
 class GGSNN(nn.Module):
   """
@@ -44,8 +50,10 @@ class GGSNN(nn.Module):
         neighbours = self.W_p(neighbours)
       else:
         batch_size = mask.size(0)
-        neighbours = hidden_state.contiguous().view(batch_size, mask.size(1), -1)
-        neighbours = neighbours.expand(mask.size(1), neighbours.size(0), neighbours.size(1), neighbours.size(2))
+        neighbours = hidden_state.contiguous().view(batch_size,
+                                                    mask.size(1), -1)
+        neighbours = neighbours.expand(mask.size(1), neighbours.size(0),
+                                       neighbours.size(1), neighbours.size(2))
         neighbours = neighbours.transpose(0,1)
         neighbours = neighbours * mask.unsqueeze(-1)
         neighbours = self.W_p(neighbours)
@@ -66,24 +74,26 @@ class FCGGNN(nn.Module):
     super(FCGGNN, self).__init__()
     self.encoder = encoder
     
-    self.role_emb = nn.Embedding(encoder.get_num_roles()+1, D_hidden_state, padding_idx=encoder.get_num_roles())
+    self.role_emb = nn.Embedding( encoder.get_num_roles()+1, D_hidden_state,
+                                  padding_idx=encoder.get_num_roles())
     self.verb_emb = nn.Embedding(encoder.get_num_verbs(), D_hidden_state)
 
-    self.convnet = resnet_modified()
+    self.convnet_verbs = resnet_modified()
+    self.convnet_nouns = resnet_modified()
+
     self.ggsnn = GGSNN(layersize=D_hidden_state)
 
     self.verb_classifier = nn.Sequential(
-      nn.Dropout(0.5),
       nn.Linear(D_hidden_state, self.encoder.get_num_verbs())
     )
 
     self.nouns_classifier = nn.Sequential(
-      nn.Dropout(0.5),
       nn.Linear(D_hidden_state, self.encoder.get_num_labels())
     )
 
 
-  def __predict_nouns(self, img_features, gt_verb, batch_size):
+  def __predict_nouns(self, img, gt_verb, batch_size):
+    img_features = self.convnet_nouns(img)
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
     role_count = self.encoder.get_max_role_count()
 
@@ -114,7 +124,8 @@ class FCGGNN(nn.Module):
     return logits.contiguous().view(batch_size, role_count, -1)
 
 
-  def __predict_verb(self, img_features, batch_size):
+  def __predict_verb(self, img, batch_size):
+    img_features = self.convnet_verbs(img)
     img_features = torch.nn.functional.relu(img_features)
 
     node = img_features.expand(1, batch_size, img_features.size(1))
@@ -127,14 +138,13 @@ class FCGGNN(nn.Module):
 
 
   def forward(self, img, gt_verb):
-    img_features = self.convnet(img)
-    batch_size = img_features.size(0)
+    batch_size = img.size(0)
     
-    pred_verb = self.__predict_verb(img_features, batch_size)
-    #pred_nouns = self.__predict_nouns(img_features, torch.argmax(pred_verb, 1), batch_size)
-    gt_pred_nouns = self.__predict_nouns(img_features, gt_verb, batch_size)
+    pred_verb = self.__predict_verb(img, batch_size)
+    pred_nouns = self.__predict_nouns(img, torch.argmax(pred_verb, 1), batch_size)
+    gt_pred_nouns = self.__predict_nouns(img, gt_verb, batch_size)
 
-    return pred_verb, gt_pred_nouns #pred_nouns#, gt_pred_nouns
+    return pred_verb, pred_nouns, gt_pred_nouns
 
 
   def verb_loss(self, pred_verb, gt_verb):
@@ -149,7 +159,8 @@ class FCGGNN(nn.Module):
     batch_size = gt_nouns.size()[0]
     nouns_lossfn = torch.nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
 
-    gt_label_turned = gt_nouns.transpose(1,2).contiguous().view(batch_size * self.encoder.max_role_count*3, -1)
+    gt_label_turned = gt_nouns.transpose(1,2).contiguous().view(batch_size *
+                                                      self.encoder.max_role_count*3, -1)
 
     pred_nouns = pred_nouns.contiguous().view(batch_size* self.encoder.max_role_count, -1)
     pred_nouns = pred_nouns.expand(3, pred_nouns.size(0), pred_nouns.size(1))
