@@ -8,7 +8,7 @@ from pathlib import Path
 from model import FCGGNN
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
-def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_saving_name, folder, checkpoint=None):
+def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_saving_name, folder, scheduler=None, checkpoint=None):
   model.train()
 
   best_score = float_info.min
@@ -29,7 +29,8 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
     else:
       model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    if scheduler is not None:
+      scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
   for e in range(epoch, max_epoch+1):
     print('Epoch-{}, lr: {}\n{}'.format(e,
@@ -121,16 +122,19 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
             'nouns_losses': nouns_losses,
             'gt_losses': gt_losses,
             'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict(),
-            'scheduler_state_dict': scheduler.state_dict()
+            'optimizer_state_dict': optimizer.state_dict()
           }
           if torch.cuda.is_available():
             checkpoint.update({'model_state_dict': model.module.state_dict()})
-            
+
+          if scheduler is not None:
+            checkpoint['model_state_dict'] = scheduler.state_dict()
+
           torch.save(checkpoint, pjoin(folder, model_saving_name))
           print ('**** model saved ****')
-
-        scheduler.step(val_loss)
+        
+        if scheduler is not None:
+          scheduler.step(val_loss)
     
     
 def eval(model, loader, encoder):
@@ -252,7 +256,7 @@ if __name__ == '__main__':
   if args.optim is None:
     raise Exception('no optimizer selected')
   elif args.optim == 'SDG':
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, nesterov=True, momentum=0.9, dampening=0)
+    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
   elif args.optim == 'ADAM':
     optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
   elif args.optim == 'ADADELTA':
@@ -264,7 +268,7 @@ if __name__ == '__main__':
   elif args.optim == 'RMSPROP':
     optimizer = torch.optim.RMSprop(model.parameters(), lr=args.lr, alpha=0.9, momentum=0.9)
   
-  scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience, mode='min', verbose=True)
+  #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience, mode='min', verbose=True)
   
   if args.evaluate:
     print ('=> evaluating model with dev-set...')
@@ -307,4 +311,4 @@ if __name__ == '__main__':
 
   else:
     print('Model training started!')
-    train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder,checkpoint=checkpoint)
+    train(model, train_loader, dev_loader, optimizer, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder, scheduler=None, checkpoint=checkpoint)
