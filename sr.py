@@ -1,13 +1,14 @@
 import torch
 import json
-import os
+from os.path import join as pjoin, isfile as pisfile
 from sys import float_info
 import matplotlib.pyplot as plt
+from pathlib import Path
 
 from model import FCGGNN
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
-def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_saving_name, checkpoint=None):
+def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_saving_name, folder, checkpoint=None):
   model.train()
 
   best_score = float_info.min
@@ -108,7 +109,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         plt.plot(nouns_losses, label='nouns losses')
         plt.plot(gt_losses, label='gt losses')
         plt.legend()
-        plt.savefig('img/losses.png')
+        plt.savefig(pjoin(folder, 'losses.png'))
         plt.clf()
 
         if avg_score > best_score:
@@ -126,7 +127,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
           if torch.cuda.is_available():
             checkpoint.update({'model_state_dict': model.module.state_dict()})
             
-          torch.save(checkpoint, model_saving_name)
+          torch.save(checkpoint, pjoin(folder, model_saving_name))
           print ('**** model saved ****')
 
         scheduler.step(val_loss)
@@ -174,6 +175,7 @@ if __name__ == '__main__':
   parser.add_argument('--test', action='store_true', help='Only use the testing mode')
   parser.add_argument('--model_saving_name', type=str, default='0', help='saving name of the outpul model')
 
+  parser.add_argument('--saving_folder', type=str, default='checkpoints', help='Location of annotations')
   parser.add_argument('--dataset_folder', type=str, default='imSitu', help='Location of annotations')
   parser.add_argument('--imgset_dir', type=str, default='resized_256', help='Location of original images')
 
@@ -194,38 +196,37 @@ if __name__ == '__main__':
 
   n_epoch = args.epochs
 
-  with open(os.path.join(args.dataset_folder, 'train.json'), 'r') as f:
+  with open(pjoin(args.dataset_folder, 'train.json'), 'r') as f:
     encoder_json = json.load(f)
   
-  with open(os.path.join(args.dataset_folder, args.train_file), 'r') as f:
+  with open(pjoin(args.dataset_folder, args.train_file), 'r') as f:
     train_json = json.load(f)
+  
+  Path(args.saving_folder).mkdir(exist_ok=True)
+  checkpoint = None
 
-  if not os.path.isfile('encoder'):
+  if not pisfile('encoder'):
     encoder = imsitu_encoder.imsitu_encoder(encoder_json)
-    torch.save(encoder, 'encoder')
+    torch.save(encoder, pjoin(args.saving_folder, 'encoder'))
   else:
-    print("Loading encoded file")
-    encoder = torch.load('encoder')
+    print("Loading encoder file")
+    encoder = torch.load(pjoin(args.saving_folder, 'encoder'))
 
 
   train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_json, encoder, encoder.train_transform)
   train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  with open(os.path.join(args.dataset_folder, args.dev_file), 'r') as f:
+  with open(pjoin(args.dataset_folder, args.dev_file), 'r') as f:
     dev_json = json.load(f)
 
   dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_json, encoder, encoder.dev_transform)
   dev_loader = torch.utils.data.DataLoader(dev_set, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
-  with open(os.path.join(args.dataset_folder, args.test_file), 'r') as f:
+  with open(pjoin(args.dataset_folder, args.test_file), 'r') as f:
     test_json = json.load(f)
 
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-
-  if not os.path.exists('trained_models'):
-    os.mkdir('trained_models')
-  checkpoint = None
 
 
   model = FCGGNN(encoder, D_hidden_state=2048)
@@ -238,10 +239,10 @@ if __name__ == '__main__':
   torch.backends.cudnn.benchmark = True
 
   if len(args.resume_model) > 1:
-
     print('Resume training from: {}'.format(args.resume_model))
-    checkpoint = torch.load(args.resume_model)
-    utils.load_net(args.resume_model, [model])
+    path_to_model = pjoin(args.saving_folder, args.resume_model)
+    checkpoint = torch.load(path_to_model)
+    utils.load_net(path_to_model, [model])
     args.model_saving_name = 'resume_model_' + args.model_saving_name
   else:
     print('Training from the scratch.')
@@ -306,4 +307,4 @@ if __name__ == '__main__':
 
   else:
     print('Model training started!')
-    train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, args.model_saving_name, checkpoint=checkpoint)
+    train(model, train_loader, dev_loader, optimizer, scheduler, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder,checkpoint=checkpoint)
