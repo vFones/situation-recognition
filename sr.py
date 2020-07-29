@@ -10,7 +10,7 @@ from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, encoder, model_saving_name, checkpoint=None):
   model.train()
 
-  best_score = float_info.max
+  best_score = float_info.min
   verb_losses = []
   nouns_losses = []
   gt_losses = []
@@ -111,7 +111,7 @@ def train(model, train_loader, dev_loader, optimizer, scheduler, max_epoch, enco
         plt.savefig('img/losses.png')
         plt.clf()
 
-        if avg_score < best_score:
+        if avg_score > best_score:
           best_score = avg_score
           checkpoint = { 
             'epoch': e+1,
