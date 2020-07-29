@@ -1,11 +1,10 @@
-img/
-trained_models/
+checkpoints/
 of500_images_resized/
 resized_256
 resized_256.zip
 .DS_Store
 .vscode
-encoder
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
