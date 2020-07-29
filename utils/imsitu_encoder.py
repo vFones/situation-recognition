@@ -11,7 +11,7 @@ class imsitu_encoder():
     self.verb_list = []
     self.role_list = []
     self.max_label_count = 3
-    self.verb2_role_dict = {}
+    self.roles_per_verb = {}
     self.label_list = []
     self.agent_label_list = []
     self.place_label_list = []
@@ -49,26 +49,8 @@ class imsitu_encoder():
       # if verb is not in verb_list
       if current_verb not in self.verb_list:
         self.verb_list.append(current_verb) #append it
-        self.verb2_role_dict[current_verb] = []
+        self.roles_per_verb[current_verb] = []
         #create a dictionary for that verb
-
-
-      roles = annotations['frames'][0].keys()
-      has_agent = False
-      has_place = False
-      agent_role = None
-      if 'place' in roles:
-        has_place = True
-      if 'agent' in roles:
-        agent_role = 'agent'
-        has_agent = True
-      else:
-        for role1 in roles:
-          if role1 in self.agent_roles[1:]:
-            agent_role = role1
-            has_agent = True
-            break
-
 
       for annotation in annotations['frames']:
         for role, label in annotation.items():
@@ -76,40 +58,31 @@ class imsitu_encoder():
           if role not in self.role_list:
             self.role_list.append(role)
           #add role in a list containing all role associated with verb
-          if role not in self.verb2_role_dict[current_verb]:
-            self.verb2_role_dict[current_verb].append(role)
+          if role not in self.roles_per_verb[current_verb]:
+            self.roles_per_verb[current_verb].append(role)
           #upgrade number of all role associated with verb
-          if len(self.verb2_role_dict[current_verb]) > self.max_role_count:
-            self.max_role_count = len(self.verb2_role_dict[current_verb])
+          if len(self.roles_per_verb[current_verb]) > self.max_role_count:
+            self.max_role_count = len(self.roles_per_verb[current_verb])
           #add label to labels list
           if label not in self.label_list:
             self.label_list.append(label)
-          if label not in self.agent_label_list:
-            if has_agent and role == agent_role:
-              self.agent_label_list.append(label)
-          if label not in self.place_label_list:
-            if has_place and role == 'place':
-              self.place_label_list.append(label)
 
-    print('train set stats: \n\t verb count:', len(self.verb_list), '\n\t role count:',len(self.role_list),
-        '\n\t label count:', len(self.label_list) ,
-        '\n\t agent label count:', len(self.agent_label_list) ,
-        '\n\t place label count:', len(self.place_label_list) ,
+    print('train set stats: \n\t verb count:', len(self.verb_list),
+        '\n\t role count:', len(self.role_list),
+        '\n\t label count:', len(self.label_list),
         '\n\t max role count:', self.max_role_count)
-
 
     # grep roles list for a verb
     roles_to_verb_list = []
     for verb_id in range(len(self.verb_list)):
-      current_role_list = self.verb2_role_dict[self.verb_list[verb_id]]
+      current_role_list = self.roles_per_verb[self.verb_list[verb_id]]
 
-      # grep role_id from current role list assicuated with verb
-      role_verb = []      
+      # grep role_id from current role list associated with verb
+      role_verb = [] # role_verb contains index of roles
       for role in current_role_list:
         role_id = self.role_list.index(role)
         role_verb.append(role_id)
-      
-      
+
       padding_count = self.max_role_count - len(current_role_list)
 
       #use padding count to create a generic tensor
@@ -126,7 +99,7 @@ class imsitu_encoder():
     verb2role_embedding_list = []
 
     for verb_id in range(len(self.verb_list)):
-      current_role_list = self.verb2_role_dict[self.verb_list[verb_id]]
+      current_role_list = self.roles_per_verb[self.verb_list[verb_id]]
 
       role_embedding_verb = []
 
@@ -149,7 +122,7 @@ class imsitu_encoder():
     role_oh = torch.eye(len(self.role_list)+1)
 
     for verb_id in range(len(self.verb_list)):
-      current_role_list = self.verb2_role_dict[self.verb_list[verb_id]]
+      current_role_list = self.roles_per_verb[self.verb_list[verb_id]]
 
       role_embedding_verb = []
 
@@ -167,7 +140,7 @@ class imsitu_encoder():
     return verb2role_oh_embedding_list
 
   def get_role_names(self, verb):
-    current_role_list = self.verb2_role_dict[verb]
+    current_role_list = self.roles_per_verb[verb]
 
     role_verb = []
     for role in current_role_list:
@@ -188,7 +161,7 @@ class imsitu_encoder():
     return len(self.label_list)
 
   def get_role_count(self, verb_id):
-    return len(self.verb2_role_dict[self.verb_list[verb_id]])
+    return len(self.roles_per_verb[self.verb_list[verb_id]])
 
   def encode(self, item):
     '''encode all '''
@@ -211,17 +184,9 @@ class imsitu_encoder():
 
     return torch.stack(role_batch_list)
 
-  def get_agent_place_ids_batch(self, batch_size):
-    role_batch_list = []
-    agent_place = torch.tensor([self.role_list.index('agent'),self.role_list.index('place')])
-    for i in range(batch_size):
-      role_batch_list.append(agent_place)
-
-    return torch.stack(role_batch_list,0)
-
   def get_label_ids(self, verb, frames):
     all_frame_id_list = []
-    roles = self.verb2_role_dict[verb]
+    roles = self.roles_per_verb[verb]
     for frame in frames:
       label_id_list = []
 
@@ -245,81 +210,6 @@ class imsitu_encoder():
     labels = torch.stack(all_frame_id_list,0)
 
     return labels
-
-  def get_agent_label_ids(self, verb, frames):
-    agent_id_list = []
-    roles = self.verb2_role_dict[verb]
-
-    has_agent = False
-    if 'agent' in roles:
-      agent_role = 'agent'
-      has_agent = True
-    else:
-      for role1 in roles:
-        if role1 in self.agent_roles[1:]:
-          agent_role = role1
-          has_agent = True
-          break
-
-    for frame in frames:
-      if has_agent:
-        agent = frame[agent_role]
-        if agent in self.agent_label_list:
-          label_id = self.agent_label_list.index(agent)
-        else:
-          label_id = self.agent_label_list.index('UNK')
-        agent_id_list.append(label_id)
-      else:
-        agent_id_list.append(len(self.agent_label_list))
-
-    labels = torch.tensor(agent_id_list)
-
-    return labels
-
-  def get_place_label_ids(self, verb, frames):
-    place_id_list = []
-    roles = self.verb2_role_dict[verb]
-
-    has_place = False
-
-    if 'place' in roles:
-      has_place = True
-
-    for frame in frames:
-
-      if has_place:
-        place = frame['place']
-        if place in self.place_label_list:
-          label_id = self.place_label_list.index(place)
-        else:
-          label_id = self.place_label_list.index('UNK')
-
-        place_id_list.append(label_id)
-
-      else:
-        place_id_list.append(len(self.place_label_list))
-
-    labels = torch.tensor(place_id_list)
-
-    return labels
-
-  def get_adj_matrix(self, verb_ids):
-    adj_matrix_list = []
-
-    for id in verb_ids:
-      encoding = self.verb2role_encoding[id]
-      encoding_tensor = torch.unsqueeze(encoding.clone().detach(),0)
-      role_count = self.get_role_count(id)
-      pad_count = self.max_role_count - role_count
-      expanded = encoding_tensor.expand(self.max_role_count, encoding_tensor.size(1))
-      transpose = torch.t(expanded)
-      adj = expanded*transpose
-      for idx in range(0,pad_count):
-        cur_idx = role_count + idx
-        adj[cur_idx][cur_idx] = 1
-      adj_matrix_list.append(adj)
-    
-    return torch.stack(adj_matrix_list).type(torch.FloatTensor)
 
   def get_adj_matrix_noself(self, verb_ids):
     adj_matrix_list = []
