@@ -171,7 +171,6 @@ def eval(model, loader, encoder):
  
 if __name__ == '__main__':
   import argparse
-  torch.multiprocessing.set_start_method('spawn')
   parser = argparse.ArgumentParser(description='Situation recognition GGNN. Training, evaluation and prediction.')
   parser.add_argument('--resume_model', type=str, default='', help='The model we resume')
   
@@ -192,7 +191,7 @@ if __name__ == '__main__':
   parser.add_argument('--num_workers', type=int, default=8)
 
   parser.add_argument('--epochs', type=int, default=500)
-  parser.add_argument('--lr', type=float, default=0.003311311214825908) 
+  parser.add_argument('--lr', type=float, default=0.025118864315095822) 
   parser.add_argument('--patience', type=int, default=10, help="The value that have to wait the scheduler before decay lr")
   parser.add_argument('--optim', type=str, help="The name of the optimizer [MUST INSERT ONE]")
 
