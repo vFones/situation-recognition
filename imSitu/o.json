@@ -1,0 +1,37 @@
+{
+  "glaring_215.jpg": {
+    "frames": [{
+      "place": "n04215402",
+      "perceiver": "",
+      "agent": "n10287213"
+    }, {
+      "place": "n08613733",
+      "perceiver": "",
+      "agent": "n10287213"
+    }, {
+      "place": "n08613733",
+      "perceiver": "",
+      "agent": "n10287213"
+    }],
+    "verb": "glaring"
+  },
+  "operating_56.jpg": {
+    "frames": [{
+      "item": "n03429288",
+      "tool": "n05564590",
+      "place": "n08613733",
+      "agent": "n09632518"
+    }, {
+      "item": "n02958343",
+      "tool": "n05564590",
+      "place": "n08613593",
+      "agent": "n10287213"
+    }, {
+      "item": "n03944672",
+      "tool": "n03626014",
+      "place": "UNK",
+      "agent": "n10287213"
+    }],
+    "verb": "operating"
+  } 
+}

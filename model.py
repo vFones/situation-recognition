@@ -5,7 +5,7 @@ GGNN implementation adapted from https://github.com/chingyaoc/ggnn.pytorch
 import torch
 import torch.nn as nn
 import torchvision as tv
-
+from torch.cuda.amp import autocast
 
 class resnet_modified(nn.Module):
   def __init__(self):
@@ -18,6 +18,7 @@ class resnet_modified(nn.Module):
 
     self.resnet.fc = nn.Linear(num_ftrs, num_ftrs)
   
+  @autocast()
   def forward(self, x):
     return self.resnet(x)
 
@@ -42,6 +43,7 @@ class GGSNN(nn.Module):
     self.W_h = nn.Linear(layersize, layersize)
     self.U_h = nn.Linear(layersize, layersize)
 
+  @autocast()
   def forward(self, hidden_state, mask=None, verb=False):
     for t in range(4):
       # calculating neighbour info
@@ -143,6 +145,7 @@ class FCGGNN(nn.Module):
     return self.verb_classifier(out)
 
 
+  @autocast()
   def forward(self, img, gt_verb):
     batch_size = img.size(0)
     

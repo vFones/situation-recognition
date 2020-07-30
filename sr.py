@@ -38,12 +38,9 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
   scaler = GradScaler()
 
   for e in range(epoch, max_epoch+1):
-    print('Epoch-{}, lr: {}\n{}'.format(e,
-           optimizer.param_groups[0]['lr'], '-'*50))
+    print('Epoch-{}, lr: {}\n'.format(e,
+           optimizer.param_groups[0]['lr']))
 
-    running_verb_loss = 0
-    running_nouns_loss = 0
-    running_gt_nouns_loss = 0
     top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
     top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
@@ -69,26 +66,37 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
         loss = verb_loss+gt_nouns_loss
       
       scaler.scale(loss).backward()
-      #loss.backward()
+      scaler.unscale_(optimizer)
       torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
       
-      #optimizer.step()
       scaler.step(optimizer)
       scaler.update()
       
-      running_verb_loss += verb_loss.item()
-      running_nouns_loss += nouns_loss.item()
-      running_gt_nouns_loss += gt_nouns_loss.item()
-
       top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       
       if torch.cuda.is_available():
-        freq = 32
+        eval_freq = 512
+        print_freq = 64
       else:
-        freq = 1
+        eval_freq = 1
+        print_freq = 1
 
-      if i % freq == 0:
+      if i % print_freq == 0:
+        print('epoch = {}, training losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
+          .format(e, verb_loss.item(), nouns_loss.item(), gt_nouns_loss.item()))
+        verb_losses.append(verb_loss.item())
+        nouns_losses.append(nouns_loss.item())
+        gt_losses.append(gt_nouns_loss.item())
+        plt.plot(verb_losses, label='verb losses')
+        plt.plot(nouns_losses, label='nouns losses')
+        plt.plot(gt_losses, label='gt losses')
+        plt.legend()
+        plt.savefig(pjoin(folder, 'losses.png'))
+        plt.clf()
+
+
+      if i % eval_freq == 0:
         top1, top5, val_loss = eval(model, dev_loader, encoder)
         model.train()
 
@@ -100,9 +108,6 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
                     top1_a['gt-value'] + top1_a['gt-value-all']
         avg_score /= 8
 
-        print('training losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
-          .format(running_verb_loss/freq, running_nouns_loss/freq,
-          running_gt_nouns_loss/freq))
 
         gt = {key:top1_a[key] for key in ['gt-value', 'gt-value-all']}
         one_val = {key:top1_a[key] for key in ['verb', 'value', 'value-all']}
@@ -110,19 +115,6 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
           .format(utils.format_dict(one_val, '{:.2f}', '1-'),
                   utils.format_dict(top5_a, '{:.2f}', '5-'),
                   utils.format_dict(gt, '{:.2f}', ''), avg_score*100, '-'*50))
-
-        verb_losses.append(running_verb_loss)
-        nouns_losses.append(running_nouns_loss)
-        gt_losses.append(running_gt_nouns_loss)
-        running_verb_loss = 0
-        running_nouns_loss = 0
-        running_gt_nouns_loss = 0
-        plt.plot(verb_losses, label='verb losses')
-        plt.plot(nouns_losses, label='nouns losses')
-        plt.plot(gt_losses, label='gt losses')
-        plt.legend()
-        plt.savefig(pjoin(folder, 'losses.png'))
-        plt.clf()
 
         if avg_score > best_score:
           best_score = avg_score
@@ -219,7 +211,7 @@ if __name__ == '__main__':
   Path(args.saving_folder).mkdir(exist_ok=True)
   checkpoint = None
 
-  if not pisfile('encoder'):
+  if not pisfile(pjoin(args.saving_folder ,'encoder')):
     encoder = imsitu_encoder.imsitu_encoder(encoder_json)
     torch.save(encoder, pjoin(args.saving_folder, 'encoder'))
   else:
