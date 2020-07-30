@@ -177,6 +177,7 @@ if __name__ == '__main__':
   parser = argparse.ArgumentParser(description='Situation recognition GGNN. Training, evaluation and prediction.')
   parser.add_argument('--resume_model', type=str, default='', help='The model we resume')
   
+  parser.add_argument('--benchmark', action='store_true', help='Only use the benchmark mode')
   parser.add_argument('--evaluate', action='store_true', help='Only use the testing mode')
   parser.add_argument('--test', action='store_true', help='Only use the testing mode')
   parser.add_argument('--model_saving_name', type=str, default='0', help='saving name of the outpul model')
@@ -312,5 +313,53 @@ if __name__ == '__main__':
               utils.format_dict(gt, '{:.2f}', ''), avg_score*100))
 
   else:
-    print('Model training started!')
-    train(model, train_loader, dev_loader, optimizer, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder, scheduler=None, checkpoint=checkpoint)
+    if args.benchmark is False:
+      print('Model training started!')
+      train(model, train_loader, dev_loader, optimizer, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder, scheduler=None, checkpoint=checkpoint)
+    
+    else:
+      print('Benchmarking, batchsize = {}'.format(args.batch_size))
+      import time
+      import multiprocessing
+      core_number = multiprocessing.cpu_count()
+      best_num_worker = [0, 0]
+      best_time = [99999999, 99999999]
+      print('cpu_count =',core_number)
+
+      def loading_time(num_workers, pin_memory):
+        kwargs = {'num_workers': num_workers, 'pin_memory': pin_memory}
+        train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, **kwargs)
+        
+        start = time.time()
+        for epoch in range(4):
+          for batch_idx, (_, img, verb, labels) in enumerate(train_loader):
+            if batch_idx == 15:
+              break
+            pass
+        end = time.time()
+        print("  Used {} second with num_workers = {}".format(end-start,num_workers))
+        return end-start
+
+      for pin_memory in [False, True]:
+        print("While pin_memory =",pin_memory)
+        for num_workers in range(0, core_number*2+1, 4): 
+          current_time = loading_time(num_workers, pin_memory)
+          if current_time < best_time[pin_memory]:
+            best_time[pin_memory] = current_time
+            best_num_worker[pin_memory] = num_workers
+          else: # assuming its a convex function  
+            if best_num_worker[pin_memory] == 0:
+              the_range = []
+            else:
+              the_range = list(range(best_num_worker[pin_memory] - 3, best_num_worker[pin_memory]))
+            for num_workers in (the_range + list(range(best_num_worker[pin_memory] + 1,best_num_worker[pin_memory] + 4))): 
+              current_time = loading_time(num_workers, pin_memory)
+              if current_time < best_time[pin_memory]:
+                best_time[pin_memory] = current_time
+                best_num_worker[pin_memory] = num_workers
+            break
+
+      if best_time[0] < best_time[1]:
+        print("Best num_workers =", best_num_worker[0], "with pin_memory = False")
+      else:
+        print("Best num_workers =", best_num_worker[1], "with pin_memory = True")
