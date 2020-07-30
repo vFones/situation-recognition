@@ -1,9 +1,11 @@
 import torch
+from torch.cuda.amp import GradScaler, autocast
 import json
 from os.path import join as pjoin, isfile as pisfile
 from sys import float_info
 import matplotlib.pyplot as plt
 from pathlib import Path
+
 
 from model import FCGGNN
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
@@ -32,6 +34,9 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     if scheduler is not None:
       scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
 
+  
+  scaler = GradScaler()
+
   for e in range(epoch, max_epoch+1):
     print('Epoch-{}, lr: {}\n{}'.format(e,
            optimizer.param_groups[0]['lr'], '-'*50))
@@ -49,22 +54,28 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
         nouns = nouns.cuda()
       
       optimizer.zero_grad()
-      pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
+      with autocast():
+        pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
 
-      if torch.cuda.is_available():
-        verb_loss = model.module.verb_loss(pred_verb, verb)
-        nouns_loss =  model.module.nouns_loss(pred_nouns, nouns)
-        gt_nouns_loss =  model.module.nouns_loss(pred_gt_nouns, nouns)
-      else:
-        verb_loss = model.verb_loss(pred_verb, verb)
-        nouns_loss =  model.nouns_loss(pred_nouns, nouns)
-        gt_nouns_loss =  model.nouns_loss(pred_gt_nouns, nouns)
+        if torch.cuda.is_available():
+          verb_loss = model.module.verb_loss(pred_verb, verb)
+          nouns_loss =  model.module.nouns_loss(pred_nouns, nouns)
+          gt_nouns_loss =  model.module.nouns_loss(pred_gt_nouns, nouns)
+        else:
+          verb_loss = model.verb_loss(pred_verb, verb)
+          nouns_loss =  model.nouns_loss(pred_nouns, nouns)
+          gt_nouns_loss =  model.nouns_loss(pred_gt_nouns, nouns)
+        
+        loss = verb_loss+gt_nouns_loss
       
-      loss = verb_loss+gt_nouns_loss
-      loss.backward()
+      scaler.scale(loss).backward()
+      #loss.backward()
       torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-      optimizer.step()
-
+      
+      #optimizer.step()
+      scaler.step(optimizer)
+      scaler.update()
+      
       running_verb_loss += verb_loss.item()
       running_nouns_loss += nouns_loss.item()
       running_gt_nouns_loss += gt_nouns_loss.item()
