@@ -13,14 +13,14 @@ class imsitu_encoder():
     self.max_label_count = 3
     self.roles_per_verb = {}
     self.label_list = []
-    self.agent_label_list = []
-    self.place_label_list = []
+    #self.agent_label_list = []
+    #self.place_label_list = []
     self.max_role_count = 0
-    self.question_words = {}
+    #self.question_words = {}
     self.vrole_question = {}
 
-    self.agent_roles = ['agent', 'individuals','brancher', 'agenttype', 'gatherers', 'agents', 'teacher', 'traveler', 'mourner',
-              'seller', 'boaters', 'blocker', 'farmer']
+    #self.agent_roles = ['agent', 'individuals','brancher', 'agenttype', 'gatherers', 'agents', 'teacher', 'traveler', 'mourner',
+    #          'seller', 'boaters', 'blocker', 'farmer']
 
     # image preprocessing used for images in pretrained models in pytorch. See docs
     self.normalize = tv.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
