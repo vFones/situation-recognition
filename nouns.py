@@ -42,22 +42,25 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
     corrects = 0
 
     # Iterate over data.
-    for i, (_, img, __, nouns) in enumerate(train_loader):
+    for i, (_, imgs, verbs, nouns) in enumerate(train_loader):
       if torch.cuda.is_available():
-        img = img.cuda()
+        imgs = imgs.cuda()
+        verbs = verbs.cuda()
         nouns = nouns.cuda()
 
       with autocast():
         # zero the parameter gradients
         optimizer.zero_grad()
 
-        outputs = model(img)
+        outputs = model(imgs)
         ___, preds = torch.max(outputs, 1)
-
         loss = 0
-        for f in range(0, 3):
-          for r in range(0, 6):
+
+        for f in range(3):
+          for r in range(6):
             loss += criterion(outputs, nouns[:,f,r])
+        loss /= 3*6
+        
       scaler.scale(loss).backward()
 
       scaler.unscale_(optimizer)
@@ -99,12 +102,19 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
         model.train()
 
       # statistics
-      total += verb.size(0)
-
-      for f in range(0, 3):
-        for r in range(0, 6):
-          running_corrects += torch.sum(preds==nouns[:,f,r].data).item()
-
+      total += nouns.size(0)
+      
+      
+      for b in range(imgs.size(0)):
+        role_count = encoder.get_role_count(verbs[b])
+        for f in range(3):
+          tmp = 0
+          for r in range(role_count):
+            tmp += torch.sum(preds[b]==nouns[b,f,r].data).item()
+          if tmp > 0:
+            corrects += tmp/tmp
+            break
+      
     epoch_acc = corrects / total
 
     print('Epoch acc: {:.2f}'.format(100 * epoch_acc))
@@ -122,19 +132,26 @@ def eval(model, criterion, loader):
   val_corrects = 0
 
   with torch.no_grad():
-    for i, (_, img, __, nouns) in enumerate(loader):
+    for i, (_, imgs, verbs, nouns) in enumerate(loader):
       if torch.cuda.is_available():
-        img = img.cuda()
+        imgs = imgs.cuda()
+        verbs = verbs.cuda()
         nouns = nouns.cuda()
 
       with autocast():
         # zero the parameter gradients
-        outputs = model(img)
+        outputs = model(imgs)
         ___, preds = torch.max(outputs, 1)
-        val_total += verb.size(0)
-        for f in range(0, 3):
-          for r in range(0, 6):
-            val_corrects += torch.sum(preds==nouns[:,f,r].data).item()
+        val_total += nouns.size(0)
+        for b in range(imgs.size(0)):
+          role_count = encoder.get_role_count(verbs[b])
+          for f in range(3):
+            tmp = 0
+            for r in range(role_count):
+              tmp += torch.sum(preds[b]==nouns[b,f,r].data).item()
+            if tmp > 0:
+              val_corrects += tmp/tmp
+              break
   
   val_acc = 100 * val_corrects / val_total
   
