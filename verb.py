@@ -15,18 +15,28 @@ from pathlib import Path
 from model import resnet
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
-def train_model(model, train_loader, optimizer, criterion, num_epochs, scheduler=None):
+def train_model(model, train_loader, val_loader, optimizer, criterion, num_epochs, model_saving_name, folder, scheduler=None, checkpoint=None):
   model.train()
   since = time.time()
-
+  e = 0
   best_model_wts = copy.deepcopy(model.state_dict())
   best_acc = 0.0
-
+  if checkpoint is not None:
+    e = checkpoint['epoch']
+    best_acc = checkpoint['best_acc']
+    if torch.cuda.is_available():
+      model.module.load_state_dict(checkpoint['model_state_dict'])
+    else:
+      model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    if scheduler is not None:
+      scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    
   scaler = GradScaler()
 
-  for epoch in range(num_epochs):
-    print('Epoch {}/{}'.format(epoch, num_epochs - 1))
+  for epoch in range(e, num_epochs):
     print('-' * 10)
+    print('Epoch {}/{}'.format(epoch, num_epochs-1))
     running_loss = 0.0
     running_corrects = 0
 
@@ -50,6 +60,61 @@ def train_model(model, train_loader, optimizer, criterion, num_epochs, scheduler
       scaler.step(optimizer)
       scaler.update()
 
+      if torch.cuda.is_available():
+        eval_freq = 512
+        print_freq = 64
+      else:
+        eval_freq = 1
+        print_freq = 1
+
+      if i % print_freq == 0:
+        print('Train current loss = [{:.2f}]'
+          .format(loss.item()))
+      
+      if i % eval_freq == 0:
+        model.eval()
+        val_loss = 0.0
+        val_corrects = 0
+
+        with torch.no_grad():
+          for i, (img_id, img, verb, nouns) in enumerate(val_loader):
+            if torch.cuda.is_available():
+              img = img.cuda()
+              verb = verb.cuda()
+              nouns = nouns.cuda()
+
+            with autocast():
+              # zero the parameter gradients
+              optimizer.zero_grad()
+
+              outputs = model(img)
+              _, preds = torch.max(outputs, 1)
+              loss = criterion(outputs, verb)
+              val_loss+=loss.item() * img.size(0)
+              val_corrects += torch.sum(preds == verb.data)
+        
+        val_loss /= len(val_loader)
+        val_acc = val_corrects.double() / len(val_loader)   
+        print('Val loss = {:.2f}, Acc = {:.2f}'
+          .format(val_loss, val_acc))
+
+        if val_acc > best_acc:
+          best_acc = val_acc
+
+          checkpoint = {
+            'epoch': epoch+1,
+            'best_acc': best_acc,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict()}
+
+          if torch.cuda.is_available():
+            checkpoint.update({'model_state_dict': model.module.state_dict()})
+          if scheduler is not None:
+            checkpoint['model_state_dict'] = scheduler.state_dict()
+
+          torch.save(checkpoint, pjoin(folder, model_saving_name))
+          print ('**** model saved ****')
+
       # statistics
       running_loss += loss.item() * img.size(0)
       running_corrects += torch.sum(preds == verb.data)
@@ -57,22 +122,14 @@ def train_model(model, train_loader, optimizer, criterion, num_epochs, scheduler
     epoch_loss = running_loss / len(train_loader)
     epoch_acc = running_corrects.double() / len(train_loader)
 
-    print('Loss: {:.4f} Acc: {:.4f}'.format(
+    print('Epoch loss: {:.2f} Acc: {:.2f}'.format(
       epoch_loss, epoch_acc))
-
-    # deep copy the model
-    if epoch_acc > best_acc:
-      best_acc = epoch_acc
-      best_model_wts = copy.deepcopy(model.state_dict())
+  
 
   time_elapsed = time.time() - since
   print('Training complete in {:.0f}m {:.0f}s'.format(
       time_elapsed // 60, time_elapsed % 60))
-  print('Best val Acc: {:4f}'.format(best_acc))
-
-  # load best model weights
-  model.load_state_dict(best_model_wts)
-  return model, optimizer
+  print('Best val Acc: {:2f}'.format(best_acc))
 
  
 if __name__ == '__main__':
@@ -146,17 +203,11 @@ if __name__ == '__main__':
     print('Resume training from: {}'.format(args.resume_model))
     path_to_model = pjoin(args.saving_folder, args.resume_model)
     checkpoint = torch.load(path_to_model)
-    if torch.cuda.is_available():
-      model.module.load_state_dict(checkpoint)
-    else:
-      model.load_state_dict(checkpoint)
     args.model_saving_name = 'resume_model_' + args.model_saving_name
-
   else:
     print('Training from the scratch.')
     args.model_saving_name = 'train_model_' + args.model_saving_name
-    for param in model.parameters():
-      param.requires_grad = True
+    
   
   optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
@@ -164,14 +215,4 @@ if __name__ == '__main__':
   scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
   
   print('Model training started!')
-  model, optimizer = train_model(model, train_loader, optimizer=optimizer, criterion=nn.CrossEntropyLoss(), num_epochs=args.epochs, scheduler=scheduler)
-
-  checkpoint = {
-    'model_state_dict': model.state_dict(),
-    'optimizer_state_dict': optimizer.state_dict()}
-
-  if torch.cuda.is_available():
-    checkpoint.update({'model_state_dict': model.module.state_dict()})
-
-  torch.save(checkpoint, pjoin(args.saving_folder, args.model_saving_name))
-  print ('**** model saved ****')
+  train_model(model, train_loader, dev_loader, optimizer, nn.CrossEntropyLoss(), args.epochs, args.model_saving_name, args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)
