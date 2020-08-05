@@ -19,8 +19,9 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
   model.train()
   since = time.time()
   e = 0
-  best_model_wts = copy.deepcopy(model.state_dict())
   best_acc = 0.0
+  epoch_acc = 0.0
+
   if checkpoint is not None:
     e = checkpoint['epoch']
     best_acc = checkpoint['best_acc']
@@ -37,8 +38,8 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
   for epoch in range(e, num_epochs):
     print('-' * 10)
     print('Epoch {}/{}'.format(epoch, num_epochs-1))
-    running_loss = 0.0
-    running_corrects = 0
+    total = 0.0
+    corrects = 0
 
     # Iterate over data.
     for i, (_, img, __, nouns) in enumerate(train_loader):
@@ -75,9 +76,9 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
           .format(loss.item()))
       
       if i % eval_freq == 0:
-        val_loss, val_acc = eval(model, criterion, val_loader)
-        print('Val loss = {:.2f}, Acc = {:.2f}'
-          .format(val_loss, val_acc))
+        val_acc = eval(model, criterion, val_loader)
+        print('Val acc = {:.2f}'
+          .format(val_acc))
 
         if val_acc > best_acc:
           best_acc = val_acc
@@ -91,24 +92,23 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
           if torch.cuda.is_available():
             checkpoint.update({'model_state_dict': model.module.state_dict()})
           if scheduler is not None:
-            checkpoint['model_state_dict'] = scheduler.state_dict()
+            checkpoint['scheduler_state_dict'] = scheduler.state_dict()
 
           torch.save(checkpoint, pjoin(folder, model_saving_name))
           print ('**** model saved ****')
         model.train()
 
       # statistics
-      running_loss += loss.item() * img.size(0)
+      total += verb.size(0)
 
       for f in range(0, 3):
         for r in range(0, 6):
-          running_corrects += torch.sum(preds==nouns[:,f,r].data)
+          running_corrects += torch.sum(preds==nouns[:,f,r].data).item()
 
-    epoch_loss = running_loss / len(train_loader)
-    epoch_acc = running_corrects.double() / len(train_loader)
+    epoch_acc = corrects / total
 
-    print('Epoch loss: {:.2f} Acc: {:.2f}'.format(
-      epoch_loss, epoch_acc))
+    print('Epoch acc: {:.2f}'.format(100 * epoch_acc))
+
   
 
   time_elapsed = time.time() - since
@@ -118,7 +118,7 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
 
 def eval(model, criterion, loader):
   model.eval()
-  val_loss = 0.0
+  val_total = 0 
   val_corrects = 0
 
   with torch.no_grad():
@@ -131,21 +131,14 @@ def eval(model, criterion, loader):
         # zero the parameter gradients
         outputs = model(img)
         ___, preds = torch.max(outputs, 1)
-        loss = 0
+        val_total += verb.size(0)
         for f in range(0, 3):
           for r in range(0, 6):
-            loss += criterion(outputs, nouns[:,f,r])
-        
-        val_loss+=loss.item() * img.size(0)
-        correct = 0
-        for f in range(0, 3):
-          for r in range(0, 6):
-            val_corrects += torch.sum(preds==nouns[:,f,r].data)
+            val_corrects += torch.sum(preds==nouns[:,f,r].data).item()
   
-  val_loss /= len(loader)
-  val_acc = val_corrects.double() / len(loader)
+  val_acc = 100 * val_corrects / val_total
   
-  return val_loss, val_acc
+  return val_acc
 
 
 if __name__ == '__main__':
