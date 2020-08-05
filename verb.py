@@ -41,7 +41,7 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
     running_corrects = 0
 
     # Iterate over data.
-    for i, (_, img, verb, nouns) in enumerate(train_loader):
+    for i, (_, img, verb, __) in enumerate(train_loader):
       if torch.cuda.is_available():
         img = img.cuda()
         verb = verb.cuda()
@@ -51,7 +51,8 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
         optimizer.zero_grad()
 
         outputs = model(img)
-        _, preds = torch.max(outputs, 1)
+        ___, preds = torch.max(outputs, 1)
+        
         loss = criterion(outputs, verb)
       
       scaler.scale(loss).backward()
@@ -72,29 +73,7 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
           .format(loss.item()))
       
       if i % eval_freq == 0:
-        model.eval()
-        val_loss = 0.0
-        val_corrects = 0
-
-        with torch.no_grad():
-          for i, (img_id, img, verb, nouns) in enumerate(val_loader):
-            if torch.cuda.is_available():
-              img = img.cuda()
-              verb = verb.cuda()
-              nouns = nouns.cuda()
-
-            with autocast():
-              # zero the parameter gradients
-              optimizer.zero_grad()
-
-              outputs = model(img)
-              _, preds = torch.max(outputs, 1)
-              loss = criterion(outputs, verb)
-              val_loss+=loss.item() * img.size(0)
-              val_corrects += torch.sum(preds == verb.data)
-        
-        val_loss /= len(val_loader)
-        val_acc = val_corrects.double() / len(val_loader)   
+        val_loss, val_acc = eval(model, criterion, val_loader)
         print('Val loss = {:.2f}, Acc = {:.2f}'
           .format(val_loss, val_acc))
 
@@ -114,6 +93,7 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
 
           torch.save(checkpoint, pjoin(folder, model_saving_name))
           print ('**** model saved ****')
+        model.train()
 
       # statistics
       running_loss += loss.item() * img.size(0)
@@ -131,7 +111,33 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
       time_elapsed // 60, time_elapsed % 60))
   print('Best val Acc: {:2f}'.format(best_acc))
 
- 
+
+def eval(model, criterion, loader):
+  model.eval()
+  val_loss = 0.0
+  val_corrects = 0
+
+  with torch.no_grad():
+    for i, (_, img, verb, __) in enumerate(loader):
+      if torch.cuda.is_available():
+        img = img.cuda()
+        verb = verb.cuda()
+        nouns = nouns.cuda()
+
+      with autocast():
+        # zero the parameter gradients
+        outputs = model(img)
+        ___, preds = torch.max(outputs, 1)
+        loss = criterion(outputs, verb)
+        val_loss+=loss.item() * img.size(0)
+        val_corrects += torch.sum(preds == verb.data)
+
+  val_loss /= len(loader)
+  val_acc = val_corrects.double() / len(loader)
+  
+  return val_loss, val_acc
+  
+
 if __name__ == '__main__':
   import argparse
   parser = argparse.ArgumentParser(description='Situation recognition GGNN. Training, evaluation and prediction.')
