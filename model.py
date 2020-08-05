@@ -22,6 +22,17 @@ class resnet_modified(nn.Module):
   def forward(self, x):
     return self.resnet(x)
 
+class resnet(nn.Module):
+  def __init__(self, out_layers):
+    super(resnet, self).__init__()
+    self.model = tv.models.resnet152(pretrained=True,
+                                      progress=False)
+    num_ftrs = self.model.fc.in_features
+    self.model.fc = nn.Linear(num_ftrs, out_layers)
+  
+  @autocast()
+  def forward(self, x):
+    return self.model(x)
 
 class GGSNN(nn.Module):
   """
