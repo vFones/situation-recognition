@@ -27,6 +27,8 @@ class resnet(nn.Module):
     super(resnet, self).__init__()
     self.model = tv.models.resnet152(pretrained=True,
                                       progress=False)
+    for param in self.model.parameters():
+          param.requires_grad = False
     num_ftrs = self.model.fc.in_features
     self.model.fc = nn.Linear(num_ftrs, out_layers)
   

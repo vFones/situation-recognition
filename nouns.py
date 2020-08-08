@@ -218,7 +218,6 @@ if __name__ == '__main__':
   model = resnet(encoder.get_num_labels())
 
   if torch.cuda.is_available():
-    print('Using', torch.cuda.device_count(), 'GPUs!')
     model = torch.nn.DataParallel(model)
     model.cuda()
 
@@ -229,12 +228,9 @@ if __name__ == '__main__':
     print('Resume training from: {}'.format(args.resume_model))
     path_to_model = pjoin(args.saving_folder, args.resume_model)
     checkpoint = torch.load(path_to_model)
-    args.model_saving_name = 'resume_model_' + args.model_saving_name
+    args.model_saving_name = args.resume_model
   else:
     print('Training from the scratch.')
-    args.model_saving_name = 'train_model_' + args.model_saving_name
-    for param in model.parameters():
-      param.requires_grad = True
   
   optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
