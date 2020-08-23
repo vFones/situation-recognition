@@ -17,7 +17,6 @@ from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
 def train_model(model, train_loader, val_loader, optimizer, criterion, num_epochs, model_saving_name, folder, scheduler=None, checkpoint=None):
   model.train()
-  since = time.time()
   e = 0
   best_acc = 0.0
   epoch_acc = 0.0
@@ -40,6 +39,8 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
     print('Epoch {}/{}'.format(epoch, num_epochs-1))
     total = 0.0
     corrects = 0
+    epoch_loss = 0
+    since = time.time()
 
     # Iterate over data.
     for i, (_, img, verb, __) in enumerate(train_loader):
@@ -55,6 +56,7 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
         ___, preds = torch.max(outputs, 1)
         
         loss = criterion(outputs, verb)
+        epoch_loss += loss.item()  
       
       scaler.scale(loss).backward()
 
@@ -62,60 +64,47 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
       scaler.step(optimizer)
       scaler.update()
 
-      if torch.cuda.is_available():
-        eval_freq = 512
-        print_freq = 64
-      else:
-        eval_freq = 1
-        print_freq = 1
-
-      if i % print_freq == 0:
-        print('Train current loss = [{:.2f}]'
-          .format(loss.item()))
-      
-      if i % eval_freq == 0:
-        val_acc = eval(model, criterion, val_loader)
-        model.train()
-
-        print('Val acc = {:.2f}'
-          .format(val_acc))
-
-        if val_acc > best_acc:
-          best_acc = val_acc
-    
-          checkpoint = {
-            'epoch': epoch+1,
-            'best_acc': best_acc,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict()}
-
-          if torch.cuda.is_available():
-            checkpoint.update({'model_state_dict': model.module.state_dict()})
-          if scheduler is not None:
-            checkpoint['scheduler_state_dict'] = scheduler.state_dict()
-
-          torch.save(checkpoint, pjoin(folder, model_saving_name))
-          print ('**** model saved ****')
-
       # statistics
       total += verb.size(0)
       corrects += torch.sum(preds == verb.data).item()
-    
+
     epoch_acc = corrects / total
 
-    print('Epoch acc: {:.2f}'.format(100 * epoch_acc))
-  
+    print('Epoch acc: {:.2f}, loss = {:.2f}'.format(100 * epoch_acc, epoch_loss))
+    val_acc, val_loss = eval(model, criterion, val_loader)
+    model.train()
 
-  time_elapsed = time.time() - since
-  print('Training complete in {:.0f}m {:.0f}s'.format(
-      time_elapsed // 60, time_elapsed % 60))
-  print('Best val Acc: {:2f}'.format(best_acc))
+    print('Val acc = {:.2f}, loss = {:.2f}'
+      .format(val_acc, val_loss))
+
+    if val_acc > best_acc:
+      best_acc = val_acc
+
+      checkpoint = {
+        'epoch': epoch+1,
+        'best_acc': best_acc,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict()}
+
+      if torch.cuda.is_available():
+        checkpoint.update({'model_state_dict': model.module.state_dict()})
+      if scheduler is not None:
+        checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+
+      torch.save(checkpoint, pjoin(folder, model_saving_name))
+      print ('**** model saved ****')
+
+    time_elapsed = time.time() - since
+    print('Epoch complete in {:.0f}m {:.0f}s'.format(
+        time_elapsed // 60, time_elapsed % 60))
+    #print('Best val Acc: {:2f}, during epoch {}'.format(best_acc, checkpoint['epoch']-1))
 
 
 def eval(model, criterion, loader):
   model.eval()
   val_total = 0 
   val_corrects = 0
+  total_loss = 0
 
   with torch.no_grad():
     for i, (_, img, verb, __) in enumerate(loader):
@@ -128,12 +117,13 @@ def eval(model, criterion, loader):
         outputs = model(img)
         ___, preds = torch.max(outputs, 1)
         loss = criterion(outputs, verb)
+        total_loss += loss.item()
         val_total += verb.size(0)
         val_corrects += torch.sum(preds == verb.data).item()
 
   val_acc = 100 * val_corrects / val_total
   
-  return val_acc
+  return val_acc, total_loss
   
 
 if __name__ == '__main__':
