@@ -157,7 +157,9 @@ if __name__ == '__main__':
   parser.add_argument('--batch_size', type=int, default=256)
   parser.add_argument('--num_workers', type=int, default=10)
 
+
   parser.add_argument('--epochs', type=int, default=250)
+  parser.add_argument('--lr', type=float, default=0.001)
 
   args = parser.parse_args()
 
@@ -199,7 +201,7 @@ if __name__ == '__main__':
     model = torch.nn.DataParallel(model)
     model.cuda()
 
-  torch.manual_seed(1111)
+  #torch.manual_seed(1111)
   torch.backends.cudnn.benchmark = True
 
   if len(args.resume_model) > 1:
@@ -210,10 +212,10 @@ if __name__ == '__main__':
   else:
     print('Training from the scratch.')
 
-  optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+  optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=args.lr, momentum=0.9)
 
   # Decay LR by a factor of 0.1 every 7 epochs
-  scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
-  
+  #scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+  scheduler=None
   print('Model training started!')
   train_model(model, train_loader, dev_loader, optimizer, nn.CrossEntropyLoss(), args.epochs, args.model_saving_name, args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)

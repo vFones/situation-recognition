@@ -232,10 +232,10 @@ if __name__ == '__main__':
   else:
     print('Training from the scratch.')
   
-  optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
-
+  optimizer = optim.SGD(model.parameters(), lr=0.3311311214825908)
+  scheduler=None
   # Decay LR by a factor of 0.1 every 7 epochs
-  scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
+  #scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
   
   print('Model training started!')
   train_model(model, train_loader, dev_loader, optimizer, nn.CrossEntropyLoss(ignore_index=encoder.get_num_labels()), args.epochs, args.model_saving_name, args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)
