@@ -28,9 +28,15 @@ class resnet(nn.Module):
     self.model = tv.models.resnet152(pretrained=True,
                                       progress=False)
     for param in self.model.parameters():
-          param.requires_grad = False
+      param.requires_grad = False
+
     num_ftrs = self.model.fc.in_features
-    self.model.fc = nn.Linear(num_ftrs, out_layers)
+    self.model.fc = nn.Sequential(
+      #nn.Linear(num_ftrs, 256),
+      nn.ReLU(),
+      nn.Dropout(0.4),
+      #nn.Linear(256, out_layers))
+      nn.Linear(num_ftrs, out_layers))
   
   @autocast()
   def forward(self, x):
