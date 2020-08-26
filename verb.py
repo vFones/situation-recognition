@@ -70,7 +70,7 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
 
     epoch_acc = corrects / total
 
-    print('Epoch acc: {:.2f}, loss = {:.2f}'.format(100 * epoch_acc, epoch_loss))
+    print('Epoch acc: {:.2f}, loss = {:.2f}'.format(100 * epoch_acc, epoch_loss/len(train_loader)))
     val_acc, val_loss = eval(model, criterion, val_loader)
     model.train()
 
@@ -123,7 +123,7 @@ def eval(model, criterion, loader):
 
   val_acc = 100 * val_corrects / val_total
   
-  return val_acc, total_loss
+  return val_acc, total_loss/len(loader)
   
 
 if __name__ == '__main__':
@@ -202,7 +202,9 @@ if __name__ == '__main__':
   else:
     print('Training from the scratch.')
 
-  optimizer = optim.SGD(filter(lambda x: x.requires_grad, model.parameters()), lr=args.lr, momentum=0.9)
+  optimizer = optim.RMSprop(model.parameters(), lr=args.lr)
+  #optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9,
+  #   nesterov=True, weight_decay=1e-4)
 
   # Decay LR by a factor of 0.1 every 7 epochs
   #scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
