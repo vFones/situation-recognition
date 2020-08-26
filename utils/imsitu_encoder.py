@@ -26,17 +26,14 @@ class imsitu_encoder():
     self.normalize = tv.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 
     self.train_transform = tv.transforms.Compose([
-      tv.transforms.RandomResizedCrop(size=256, scale=(0.8, 1.0)),
-      tv.transforms.RandomRotation(degrees=15),
-      tv.transforms.ColorJitter(),
+      tv.transforms.RandomResizedCrop(224),
       tv.transforms.RandomHorizontalFlip(),
-      tv.transforms.CenterCrop(size=224),
       tv.transforms.ToTensor(),
       self.normalize,
     ])
 
     self.dev_transform = tv.transforms.Compose([
-      tv.transforms.Resize(256),
+      tv.transforms.Resize(224),
       tv.transforms.CenterCrop(224),
       tv.transforms.ToTensor(),
       self.normalize,
