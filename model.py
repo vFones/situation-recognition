@@ -8,30 +8,18 @@ import torchvision as tv
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
 
-class resnet_modified(nn.Module):
-  def __init__(self):
-    super(resnet_modified, self).__init__()
-    self.resnet = tv.models.resnet152(pretrained=True,
-                                      progress=False)
-    for param in self.resnet.parameters():
-      param.requires_grad = False
-    num_ftrs = self.resnet.fc.in_features
-
-    self.resnet.fc = nn.Linear(num_ftrs, num_ftrs)
-  
-  @autocast()
-  def forward(self, x):
-    return self.resnet(x)
-
 class resnet(nn.Module):
   def __init__(self, out_layers):
     super(resnet, self).__init__()
-    self.model = tv.models.resnet152(pretrained=True,
-                                      progress=False)
+
+    self.model = tv.models.resnet101(pretrained=True)
 
     num_ftrs = self.model.fc.in_features
-    self.model.fc = nn.Linear(num_ftrs, out_layers)
-    self.model.fc.register_forward_hook(lambda m, inp, out: F.dropout(out, p=0.5, training=m.training))
+    self.model.fc = nn.Sequential(
+            nn.Dropout2d(.5),
+            nn.Dropout(.5),
+            nn.LeakyReLU(),
+            nn.Linear(num_ftrs, 504))
 
   @autocast()
   def forward(self, x):

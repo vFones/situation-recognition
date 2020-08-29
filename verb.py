@@ -149,7 +149,7 @@ if __name__ == '__main__':
 
 
   parser.add_argument('--epochs', type=int, default=250)
-  parser.add_argument('--lr', type=float, default=0.001)
+  parser.add_argument('--lr', type=float, default=1e-5)
 
   args = parser.parse_args()
 
@@ -202,7 +202,7 @@ if __name__ == '__main__':
   else:
     print('Training from the scratch.')
 
-  optimizer = optim.RMSprop(model.parameters(), lr=args.lr)
+  optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
   #optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9,
   #   nesterov=True, weight_decay=1e-4)
 
