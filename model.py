@@ -2,28 +2,91 @@
 PyTorch implementation of GGNN based SR : https://arxiv.org/abs/1708.04320
 GGNN implementation adapted from https://github.com/chingyaoc/ggnn.pytorch
 '''
+import math
 import torch
 import torch.nn as nn
 import torchvision as tv
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
 
+class vgg16_modified(nn.Module):
+  def __init__(self):
+    super(vgg16_modified, self).__init__()
+
+    self.vgg = tv.models.vgg16_bn(pretrained=True)
+    in_features = self.vgg.classifier[6].in_features
+    self.vgg.classifier[6] = nn.Linear(in_features, 504)
+
+  @autocast()
+  def forward(self, x):
+    return self.vgg(x)
+
 class resnet(nn.Module):
   def __init__(self, out_layers):
     super(resnet, self).__init__()
 
-    self.model = tv.models.resnet101(pretrained=True)
+    self.model = tv.models.resnet50(pretrained=True)
+    for parameter in self.model.parameters():
+      parameter.requires_grad = False
 
     num_ftrs = self.model.fc.in_features
     self.model.fc = nn.Sequential(
-            nn.Dropout2d(.5),
-            nn.Dropout(.5),
-            nn.LeakyReLU(),
-            nn.Linear(num_ftrs, 504))
+        nn.Linear(num_ftrs, out_layers))
 
   @autocast()
   def forward(self, x):
     return self.model(x)
+
+class resnet_modified(nn.Module):
+  def __init__(self):
+    super(resnet_modified, self).__init__()
+
+    self.resnet = tv.models.resnet152(pretrained=True)
+    self.resnet.fc = nn.Identity()
+  
+  @autocast()
+  def forward(self, x):
+    return self.resnet(x)
+
+'''
+class resnet_modified(nn.Module):
+  def __init__(self, out_layers):
+    super(resnet_modified, self).__init__()
+
+    self.model = tv.models.resnet50(pretrained=True)
+
+    num_ftrs = self.model.fc.in_features
+    self.model.fc = nn.Sequential(
+        nn.Dropout2d(.5),
+        nn.Dropout(.5),
+        nn.LeakyReLU(),
+        nn.Linear(num_ftrs, out_layers))
+    
+    fan = num_ftrs + out_layers
+    spread = math.sqrt(2.0) * math.sqrt( 2.0 / fan )
+    self.model.fc[3].weight.data.uniform_(-spread,spread)
+    self.model.fc[3].bias.data.uniform_(-spread,spread)
+
+  @autocast()
+  def forward(self, x):
+    return self.model(x)
+'''
+class inceptionv3(nn.Module):
+  def __init__(self, out):
+    super(inceptionv3, self).__init__()
+
+    self.model = tv.models.inception_v3(pretrained=True)
+    for parameter in self.model.parameters():
+      parameter.requires_grad = False
+
+    self.model.aux_logits=False
+    fc_ftrs = self.model.fc.in_features
+    self.model.fc = nn.Linear(fc_ftrs, out)
+
+  @autocast()
+  def forward(self, x):
+    return self.model(x)
+
 
 class GGSNN(nn.Module):
   """
@@ -74,7 +137,7 @@ class GGSNN(nn.Module):
 
 
 class FCGGNN(nn.Module):
-  def __init__(self, encoder, D_hidden_state):
+  def __init__(self, encoder, D_hidden_state, cnn_verb):
     super(FCGGNN, self).__init__()
     self.encoder = encoder
     
@@ -82,8 +145,8 @@ class FCGGNN(nn.Module):
                                   padding_idx=encoder.get_num_roles())
     self.verb_emb = nn.Embedding(encoder.get_num_verbs(), D_hidden_state)
 
-    self.convnet_verbs = resnet_modified()
-    self.convnet_nouns = resnet_modified()
+    self.convnet_verbs = cnn_verb
+    self.convnet_nouns = resnet_modified() 
 
     self.ggsnn = GGSNN(layersize=D_hidden_state)
 
@@ -95,7 +158,7 @@ class FCGGNN(nn.Module):
       nn.Linear(D_hidden_state, self.encoder.get_num_labels())
     )
 
-
+  @autocast()
   def __predict_nouns(self, img, gt_verb, batch_size):
     img_features = self.convnet_nouns(img)
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
@@ -133,7 +196,7 @@ class FCGGNN(nn.Module):
     # return predicted nouns based on grount truth of images in batch
     return logits.contiguous().view(batch_size, role_count, -1)
 
-
+  @autocast()
   def __predict_verb(self, img, batch_size):
     img_features = self.convnet_verbs(img)
     img_features = torch.nn.functional.relu(img_features)
@@ -157,7 +220,7 @@ class FCGGNN(nn.Module):
 
     return pred_verb, pred_nouns, gt_pred_nouns
 
-
+  @autocast()
   def verb_loss(self, pred_verb, gt_verb):
     batch_size = gt_verb.size()[0]
     verb_lossfn = torch.nn.CrossEntropyLoss()
@@ -165,7 +228,7 @@ class FCGGNN(nn.Module):
 
     return loss
 
-
+  @autocast()
   def nouns_loss(self, pred_nouns, gt_nouns):
     batch_size = gt_nouns.size()[0]
     nouns_lossfn = torch.nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
