@@ -12,18 +12,25 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 
-from model import resnet
+from model import resnet, vgg16_modified, resnet_modified, inceptionv3
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
 def train_model(model, train_loader, val_loader, optimizer, criterion, num_epochs, model_saving_name, folder, scheduler=None, checkpoint=None):
   model.train()
   e = 0
-  best_acc = 0.0
-  epoch_acc = 0.0
+  #best_acc = 0.0
+  #epoch_acc = 0.0
+  val_losses = []
+  train_losses = []
+  val_acc = []
+  train_acc = []
 
   if checkpoint is not None:
     e = checkpoint['epoch']
-    best_acc = checkpoint['best_acc']
+    val_losses = checkpoint['val_losses']
+    train_losses = checkpoint['train_losses']
+    val_acc = checkpoint['val_acc']
+    train_acc = checkpoint['train_acc']
     if torch.cuda.is_available():
       model.module.load_state_dict(checkpoint['model_state_dict'])
     else:
@@ -70,34 +77,50 @@ def train_model(model, train_loader, val_loader, optimizer, criterion, num_epoch
 
     epoch_acc = corrects / total
 
-    print('Epoch acc: {:.2f}, loss = {:.2f}'.format(100 * epoch_acc, epoch_loss/len(train_loader)))
-    val_acc, val_loss = eval(model, criterion, val_loader)
+    acc, val_loss = eval(model, criterion, val_loader)
     model.train()
 
-    print('Val acc = {:.2f}, loss = {:.2f}'
-      .format(val_acc, val_loss))
+    epoch_losss = epoch_loss/len(train_loader)
 
-    if val_acc > best_acc:
-      best_acc = val_acc
+    val_losses.append(val_loss)
+    train_losses.append(epoch_losss)
+    val_acc.append(acc)
+    train_acc.append(epoch_acc * 100)
+    
+    plt.plot(val_losses, label='validation loss')
+    plt.plot(train_losses, label='train loss')
+    plt.plot(val_acc, label='validation acc')
+    plt.plot(train_acc, label='train acc')
+    plt.legend()
+    plt.ylabel('accuracies/losses')
+    plt.xlabel('epochs')
+    plt.title('504 verbs classification')
+    plt.savefig(pjoin(folder, model_saving_name+'.png'))
+    plt.clf()
 
-      checkpoint = {
-        'epoch': epoch+1,
-        'best_acc': best_acc,
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict()}
+    print('TRAIN acc: {:.2f}, loss = {:.2f}, VAL acc = {:.2f}, loss = {:.2f}'
+      .format(100 * epoch_acc, epoch_losss, acc, val_loss))
 
-      if torch.cuda.is_available():
-        checkpoint.update({'model_state_dict': model.module.state_dict()})
-      if scheduler is not None:
-        checkpoint['scheduler_state_dict'] = scheduler.state_dict()
+    checkpoint = {
+      'epoch': epoch+1,
+      'val_losses': val_losses,
+      'val_acc': val_acc,
+      'train_losses': train_losses,
+      'train_acc': train_acc,
+      'model_state_dict': model.state_dict(),
+      'optimizer_state_dict': optimizer.state_dict()}
 
-      torch.save(checkpoint, pjoin(folder, model_saving_name))
-      print ('**** model saved ****')
+    if torch.cuda.is_available():
+      checkpoint.update({'model_state_dict': model.module.state_dict()})
+    if scheduler is not None:
+      checkpoint['scheduler_state_dict'] = scheduler.state_dict()
 
-    time_elapsed = time.time() - since
-    print('Epoch complete in {:.0f}m {:.0f}s'.format(
+    torch.save(checkpoint, pjoin(folder, model_saving_name))
+
+    if epoch == 0:
+      time_elapsed = time.time() - since
+      print('Epoch complete in {:.0f}m {:.0f}s'.format(
         time_elapsed // 60, time_elapsed % 60))
-    #print('Best val Acc: {:2f}, during epoch {}'.format(best_acc, checkpoint['epoch']-1))
 
 
 def eval(model, criterion, loader):
@@ -149,7 +172,7 @@ if __name__ == '__main__':
 
 
   parser.add_argument('--epochs', type=int, default=250)
-  parser.add_argument('--lr', type=float, default=1e-5)
+  parser.add_argument('--lr', type=float, default=1e-3)
 
   args = parser.parse_args()
 
@@ -185,7 +208,10 @@ if __name__ == '__main__':
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, pin_memory=True, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  model = resnet(encoder.get_num_verbs())
+  model = inceptionv3(504)
+  #model = resnet_modified(504)
+  #model = resnet(504)
+  #model = vgg16_modified()
 
   if torch.cuda.is_available():
     model = torch.nn.DataParallel(model)
@@ -202,12 +228,13 @@ if __name__ == '__main__':
   else:
     print('Training from the scratch.')
 
-  optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=5e-4)
+  optimizer = optim.RMSprop(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
+  #optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=0.9, nesterov=True)
   #optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9,
   #   nesterov=True, weight_decay=1e-4)
 
   # Decay LR by a factor of 0.1 every 7 epochs
-  #scheduler = lr_scheduler.StepLR(optimizer, step_size=7, gamma=0.1)
   scheduler=None
+  #scheduler = lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
   print('Model training started!')
   train_model(model, train_loader, dev_loader, optimizer, nn.CrossEntropyLoss(), args.epochs, args.model_saving_name, args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)
