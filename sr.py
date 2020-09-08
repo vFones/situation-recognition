@@ -1,4 +1,5 @@
 import torch
+import torch.nn as nn
 from torch.cuda.amp import GradScaler, autocast
 import json
 from os.path import join as pjoin, isfile as pisfile
@@ -7,25 +8,34 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 
 
-from model import FCGGNN
+from model import FCGGNN, inceptionv3
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
 def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_saving_name, folder, scheduler=None, checkpoint=None):
   model.train()
 
-  best_score = float_info.min
+  avg_scores = []
   verb_losses = []
   nouns_losses = []
   gt_losses = []
+  val_avg_scores = []
+  val_verb_losses = []
+  val_nouns_losses = []
+  val_gt_losses = []
+
   epoch = 0
-  total_steps = 0
   
   if checkpoint is not None:
     epoch = checkpoint['epoch']
-    best_score = checkpoint['best_score']
+    avg_scores = checkpoint['avg_scores']
     verb_losses = checkpoint['verb_losses']
     nouns_losses = checkpoint['nouns_losses']
     gt_losses = checkpoint['gt_losses']    
+    val_avg_scores = checkpoint['val_avg_scores']
+    val_verb_losses = checkpoint['val_verb_losses']
+    val_nouns_losses = checkpoint['val_nouns_losses']
+    val_gt_losses = checkpoint['val_gt_losses']
+
     if torch.cuda.is_available():
       model.module.load_state_dict(checkpoint['model_state_dict'])
     else:
@@ -37,8 +47,12 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
   
   scaler = GradScaler()
 
-  for e in range(epoch, max_epoch+1):
-    print('Epoch-{}, lr: {}\n'.format(e,
+  for e in range(epoch, max_epoch):
+    verb_loss_accum = 0
+    nouns_loss_accum = 0
+    gt_nouns_loss_accum = 0
+
+    print('Epoch-{}, lr: {:.2f}'.format(e,
            optimizer.param_groups[0]['lr']))
 
     top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
@@ -67,83 +81,135 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
       
       scaler.scale(loss).backward()
       scaler.unscale_(optimizer)
-      torch.nn.utils.clip_grad_norm_(model.parameters(), 1)
-      
+      torch.nn.utils.clip_grad_norm_(model.parameters(), 1)    
       scaler.step(optimizer)
       scaler.update()
-      
+  
       top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
-      
+
       if torch.cuda.is_available():
-        eval_freq = 512
         print_freq = 64
       else:
-        eval_freq = 1
         print_freq = 1
 
-      if i % print_freq == 0:
-        print('epoch = {}, training losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
-          .format(e, verb_loss.item(), nouns_loss.item(), gt_nouns_loss.item()))
-        verb_losses.append(verb_loss.item())
-        nouns_losses.append(nouns_loss.item())
-        gt_losses.append(gt_nouns_loss.item())
-        plt.plot(verb_losses, label='verb losses')
-        plt.plot(nouns_losses, label='nouns losses')
-        plt.plot(gt_losses, label='gt losses')
-        plt.legend()
-        plt.savefig(pjoin(folder, 'losses.png'))
-        plt.clf()
+      #if i % print_freq == 0:
+      #  print('training losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
+      #    .format(verb_loss.item(), nouns_loss.item(), gt_nouns_loss.item()))
+      
+      verb_loss_accum += verb_loss.item()
+      nouns_loss_accum += nouns_loss.item()
+      gt_nouns_loss_accum += gt_nouns_loss.item()
+      #fin epoch
 
-
-      if i % eval_freq == 0:
-        top1, top5, val_loss = eval(model, dev_loader, encoder)
-        model.train()
-
-        top1_a = top1.get_average_results_both()
-        top5_a = top5.get_average_results_both()
-
-        avg_score = top1_a['verb'] + top1_a['value'] + top1_a['value-all'] + \
-                    top5_a['verb'] + top5_a['value'] + top5_a['value-all'] + \
-                    top1_a['gt-value'] + top1_a['gt-value-all']
-        avg_score /= 8
-
-
-        gt = {key:top1_a[key] for key in ['gt-value', 'gt-value-all']}
-        one_val = {key:top1_a[key] for key in ['verb', 'value', 'value-all']}
-        print('{}\n{}\n{}, mean = {:.2f}\n{}'
-          .format(utils.format_dict(one_val, '{:.2f}', '1-'),
-                  utils.format_dict(top5_a, '{:.2f}', '5-'),
-                  utils.format_dict(gt, '{:.2f}', ''), avg_score*100, '-'*50))
-
-        if avg_score > best_score:
-          best_score = avg_score
-          checkpoint = { 
-            'epoch': e+1,
-            'best_score': best_score,
-            'verb_losses': verb_losses,
-            'nouns_losses': nouns_losses,
-            'gt_losses': gt_losses,
-            'model_state_dict': model.state_dict(),
-            'optimizer_state_dict': optimizer.state_dict()
-          }
-          if torch.cuda.is_available():
-            checkpoint.update({'model_state_dict': model.module.state_dict()})
-
-          if scheduler is not None:
-            checkpoint['model_state_dict'] = scheduler.state_dict()
-
-          torch.save(checkpoint, pjoin(folder, model_saving_name))
-          print ('**** model saved ****')
-        
-        if scheduler is not None:
-          scheduler.step(val_loss)
+    #epoch accuracy mean
+    top1_a = top1.get_average_results_both()
+    top5_a = top5.get_average_results_both()
+    avg_score = top1_a['verb'] + top1_a['value'] + top1_a['value-all'] + \
+                top5_a['verb'] + top5_a['value'] + top5_a['value-all'] + \
+                top1_a['gt-value'] + top1_a['gt-value-all']
+    avg_score /= 8
+    avg_score *= 100
+    avg_scores.append(avg_score)
     
+    #epoch lossess
+    verb_loss_mean = verb_loss_accum / len(train_loader)
+    nouns_loss_mean = nouns_loss_accum / len(train_loader)
+    gt_nouns_loss_mean = gt_nouns_loss_accum / len(train_loader)
+
+    verb_losses.append(verb_loss_mean)
+    nouns_losses.append(nouns_loss_mean)
+    gt_losses.append(gt_nouns_loss_mean)
     
+    print('training losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
+      .format(verb_loss_mean, nouns_loss_mean, gt_nouns_loss_mean))
+      
+    gt = {key:top1_a[key] for key in ['gt-value', 'gt-value-all']}
+    one_val = {key:top1_a[key] for key in ['verb', 'value', 'value-all']}
+    print('{}\n{}\n{}, mean = {:.2f}\n{}'
+      .format(utils.format_dict(one_val, '{:.2f}', '1-'),
+                utils.format_dict(top5_a, '{:.2f}', '5-'),
+                utils.format_dict(gt, '{:.2f}', ''), avg_score, '-'*50))
+
+    # evaluating 
+    top1, top5, val_losses = eval(model, dev_loader, encoder)
+    model.train()
+
+    #val mean scores
+    top1_a = top1.get_average_results_both()
+    top5_a = top5.get_average_results_both()
+    avg_score = top1_a['verb'] + top1_a['value'] + top1_a['value-all'] + \
+                top5_a['verb'] + top5_a['value'] + top5_a['value-all'] + \
+                top1_a['gt-value'] + top1_a['gt-value-all']
+    avg_score /= 8
+    val_avg_score = avg_score * 100
+    val_avg_scores.append(val_avg_score)
+
+    #plots
+    val_verb_losses.append(val_losses['verb_loss'])
+    val_nouns_losses.append(val_losses['nouns_loss'])
+    val_gt_losses.append(val_losses['gt_loss'])
+    
+    plt.plot(verb_losses, label='verb losses')
+    plt.plot(nouns_losses, label='nouns losses')
+    plt.plot(gt_losses, label='gt losses')
+    plt.plot(avg_scores, label='accuracy mean')
+
+    plt.plot(val_verb_losses, '-.', label='val verb losses')
+    plt.plot(val_nouns_losses, '-.', label='val nouns losses')
+    plt.plot(val_gt_losses, '-.', label='val losses')
+    plt.plot(val_avg_scores, '-.', label='val accuracy mean')
+    
+    plt.plot()
+    plt.legend()
+    plt.savefig(pjoin(folder, model_saving_name+'.png'))
+    plt.clf()
+
+    print('validation losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
+      .format(val_losses['verb_loss'], val_losses['nouns_loss'], val_losses['gt_loss']))
+      
+    gt = {key:top1_a[key] for key in ['gt-value', 'gt-value-all']}
+    one_val = {key:top1_a[key] for key in ['verb', 'value', 'value-all']}
+    print('{}\n{}\n{}, mean = {:.2f}\n{}'
+      .format(utils.format_dict(one_val, '{:.2f}', '1-'),
+                utils.format_dict(top5_a, '{:.2f}', '5-'),
+                utils.format_dict(gt, '{:.2f}', ''), val_avg_score, '-'*50))
+
+
+    checkpoint = { 
+      'epoch': e+1,
+      'avg_scores': avg_scores,
+      'verb_losses': verb_losses,
+      'nouns_losses': nouns_losses,
+      'gt_losses': gt_losses,
+      
+      'val_avg_scores': val_avg_scores,
+      'val_verb_losses': val_verb_losses,
+      'val_nouns_losses': val_nouns_losses,
+      'val_gt_losses': val_gt_losses,
+      
+      'model_state_dict': model.state_dict(),
+      'optimizer_state_dict': optimizer.state_dict()
+    }
+
+    if torch.cuda.is_available():
+      checkpoint.update({'model_state_dict': model.module.state_dict()})
+    if scheduler is not None:
+      checkpoint['model_state_dict'] = scheduler.state_dict()
+    
+    torch.save(checkpoint, pjoin(folder, model_saving_name))
+      
+    if scheduler is not None:
+      scheduler.step(val_loss)
+
+
 def eval(model, loader, encoder):
   model.eval()
 
-  val_loss = 0
+  verbloss = 0
+  nounsloss = 0
+  gtloss = 0
+
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
   with torch.no_grad():
@@ -152,22 +218,30 @@ def eval(model, loader, encoder):
         img = img.cuda()
         verb = verb.cuda()
         nouns = nouns.cuda()
-
-      pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
-
-      top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
-      top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       
-      if torch.cuda.is_available():
-        verb_loss = model.module.verb_loss(pred_verb, verb)
-        nouns_loss =  model.module.nouns_loss(pred_nouns, nouns)
-        gt_loss =  model.module.nouns_loss(pred_gt_nouns, nouns)
-      else:
-        verb_loss = model.verb_loss(pred_verb, verb)
-        nouns_loss =  model.nouns_loss(pred_nouns, nouns)
-        gt_loss =  model.nouns_loss(pred_gt_nouns, nouns)
+      with autocast():
+        pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
+
+        top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
+        top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       
-      val_loss += verb_loss+gt_loss
+        if torch.cuda.is_available():
+          vl = model.module.verb_loss(pred_verb, verb)
+          nl =  model.module.nouns_loss(pred_nouns, nouns)
+          gtl =  model.module.nouns_loss(pred_gt_nouns, nouns)
+        else:
+          vl = model.verb_loss(pred_verb, verb)
+          nl =  model.nouns_loss(pred_nouns, nouns)
+          gtl =  model.nouns_loss(pred_gt_nouns, nouns)
+      
+        verbloss += vl.item()
+        nounsloss += nl.item()
+        gtloss += gtl.item()
+
+  verbloss /= len(loader)
+  nounsloss /= len(loader)
+  gtloss /= len(loader)
+  val_loss = {'verb_loss':verbloss, 'nouns_loss': nounsloss, 'gt_loss': gtloss}
 
   return top1, top5, val_loss
 
@@ -235,14 +309,31 @@ if __name__ == '__main__':
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, pin_memory=True, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
+  cnn_verb = inceptionv3(encoder.get_num_verbs())
+  if torch.cuda.is_available():
+    #cnn_verb = torch.nn.DataParallel(cnn_verb)
+    cnn_verb.cuda()
 
-  model = FCGGNN(encoder, D_hidden_state=2048)
+  path = pjoin(args.saving_folder, "inceptionv3")
+  ckp = torch.load(path)
+  
+  if torch.cuda.is_available():
+    #cnn_verb.module.load_state_dict(ckp['model_state_dict'])
+    #cnn_verb.module.model.fc = nn.Identity()
+  #else: 
+    cnn_verb.load_state_dict(ckp['model_state_dict']) 
+    cnn_verb.model.fc = nn.Identity()
+  
+  for param in cnn_verb.parameters():
+    param.required_grad=False
+
+  model = FCGGNN(encoder, D_hidden_state=2048, cnn_verb=cnn_verb)
   if torch.cuda.is_available():
     print('Using', torch.cuda.device_count(), 'GPUs!')
     model = torch.nn.DataParallel(model)
     model.cuda()
 
-  torch.manual_seed(1111)
+  #torch.manual_seed(1111)
   torch.backends.cudnn.benchmark = True
 
   if len(args.resume_model) > 1:
@@ -250,10 +341,9 @@ if __name__ == '__main__':
     path_to_model = pjoin(args.saving_folder, args.resume_model)
     checkpoint = torch.load(path_to_model)
     utils.load_net(path_to_model, [model])
-    args.model_saving_name = 'resume_model_' + args.model_saving_name
+    args.model_saving_name = args.resume_model
   else:
     print('Training from the scratch.')
-    args.model_saving_name = 'train_model_' + args.model_saving_name
     utils.set_trainable(model, True)
   
   if args.optim is None:
