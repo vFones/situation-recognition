@@ -49,7 +49,7 @@ class imsitu_scorer():
             if pred_role_noun_idx[r][k] == role_noun[n][r]:
               found += 1
 
-        if found >= 3:
+        if found >= gt_roles_count:
           new_card["value-all"] += 1
 
         if found > 0:
@@ -63,14 +63,17 @@ class imsitu_scorer():
             if gt_pred_role_noun_idx[r][0] == role_noun[n][r]:
               gt_found += 1
         
-        if gt_found >= 3:
+        if gt_found >= gt_roles_count:
           new_card["gt-value-all"] += 1
 
         if gt_found > 0:
-          new_card["gt-value"] += 1 
-
-      new_card["value"] /= self.topk
-      new_card["value-all"] /= self.topk
+          new_card["gt-value"] += 1
+        
+        new_card["gt-value"] /= gt_roles_count
+        new_card["gt-value-all"] /= gt_roles_count
+      
+      new_card["value"] /= gt_roles_count
+      new_card["value-all"] /= gt_roles_count
       self.score_cards.append(new_card)
 
 
