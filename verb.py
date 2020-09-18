@@ -11,7 +11,7 @@ from sys import float_info
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-
+#from darknet import darknet53 as darknet
 from model import resnet, vgg16_modified, resnet_modified, inceptionv3
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
@@ -208,18 +208,37 @@ if __name__ == '__main__':
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, pin_memory=True, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  model = inceptionv3(504)
-  #model = resnet_modified(504)
+  #model = inceptionv3(504)
+  model = resnet_modified(504)
   #model = resnet(504)
   #model = vgg16_modified()
-
+  #model = darknet(1000)
+  
   if torch.cuda.is_available():
     model = torch.nn.DataParallel(model)
     model.cuda()
 
+  checkpoint = torch.load('checkpoints/darknet-pretrained')
+  model.module.load_state_dict(checkpoint['state_dict'])
+  model.fc = torch.nn.Linear(1024, 504)
+
+  for param in model.parameters():
+      param.required_grad = False
+  model.fc.required_grad = True
+
+
   #torch.manual_seed(1111)
   torch.backends.cudnn.benchmark = True
 
+  #optimizer = optim.RMSprop(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
+  optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=0.9, weight_decay=1e-4)
+  #optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9,
+  #   nesterov=True, weight_decay=1e-4)
+
+  # Decay LR by a factor of 0.1 every 7 epochs
+  #scheduler=None
+  #optimizer.load_state_dict(checkpoint['optimizer'])
+  checkpoint=None
   if len(args.resume_model) > 1:
     print('Resume training from: {}'.format(args.resume_model))
     path_to_model = pjoin(args.saving_folder, args.resume_model)
@@ -228,13 +247,7 @@ if __name__ == '__main__':
   else:
     print('Training from the scratch.')
 
-  optimizer = optim.RMSprop(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
-  #optimizer = optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=0.9, nesterov=True)
-  #optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=0.9,
-  #   nesterov=True, weight_decay=1e-4)
 
-  # Decay LR by a factor of 0.1 every 7 epochs
-  scheduler=None
-  #scheduler = lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1)
+  scheduler = lr_scheduler.StepLR(optimizer, step_size=10, gamma=0.1)
   print('Model training started!')
-  train_model(model, train_loader, dev_loader, optimizer, nn.CrossEntropyLoss(), args.epochs, args.model_saving_name, args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)
+  train_model(model, train_loader, dev_loader, optimizer, nn.CrossEntropyLoss().cuda(), args.epochs, args.model_saving_name, args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)
