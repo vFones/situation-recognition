@@ -28,8 +28,8 @@ class imsitu_scorer():
       role_noun = roles_nouns[i]
 
       _, pred_verb_idx = torch.topk(pred_verb, self.topk)
-      _, pred_role_noun_idx = torch.topk(pred_role_nouns, self.topk)      
-      
+      _, pred_role_noun_idx = torch.topk(pred_role_nouns, self.topk)  
+
       gt_roles_count = self.encoder.get_role_count(verb)
       
       for k in range(0, self.topk):
@@ -69,11 +69,9 @@ class imsitu_scorer():
         if gt_found > 0:
           new_card["gt-value"] += 1
         
-        new_card["gt-value"] /= gt_roles_count
-        new_card["gt-value-all"] /= gt_roles_count
-      
-      new_card["value"] /= gt_roles_count
-      new_card["value-all"] /= gt_roles_count
+      for key, value in new_card.items():
+        if value > 0:
+          new_card[key] = 1
       self.score_cards.append(new_card)
 
 
