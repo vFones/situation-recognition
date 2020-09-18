@@ -25,25 +25,40 @@ class resnet(nn.Module):
   def __init__(self, out_layers):
     super(resnet, self).__init__()
 
-    self.model = tv.models.resnet50(pretrained=True)
+    self.model = tv.models.resnet152(pretrained=True, progress=False)
     for parameter in self.model.parameters():
       parameter.requires_grad = False
 
     num_ftrs = self.model.fc.in_features
-    self.model.fc = nn.Sequential(
-        nn.Linear(num_ftrs, out_layers))
+    self.model.fc = nn.Linear(num_ftrs, out_layers)
+
+    fan = self.model.fc.in_features +  self.model.fc.out_features 
+    spread = math.sqrt(2.0) * math.sqrt( 2.0 / fan )
+  
+    self.model.fc.weight.data.uniform_(-spread,spread)
+    self.model.fc.bias.data.uniform_(-spread,spread) 
+
+    self.model.fc=nn.Identity()
 
   @autocast()
   def forward(self, x):
     return self.model(x)
 
 class resnet_modified(nn.Module):
-  def __init__(self):
+  def __init__(self, out_layers):
     super(resnet_modified, self).__init__()
 
     self.resnet = tv.models.resnet152(pretrained=True)
-    self.resnet.fc = nn.Identity()
+    
+    num_ftrs = self.model.fc.in_features
+    self.model.fc = nn.Linear(num_ftrs, out_layers)
+
+    fan = self.model.fc.in_features +  self.model.fc.out_features 
+    spread = math.sqrt(2.0) * math.sqrt( 2.0 / fan )
   
+    self.model.fc.weight.data.uniform_(-spread,spread)
+    self.model.fc.bias.data.uniform_(-spread,spread) 
+
   @autocast()
   def forward(self, x):
     return self.resnet(x)
@@ -137,7 +152,7 @@ class GGSNN(nn.Module):
 
 
 class FCGGNN(nn.Module):
-  def __init__(self, encoder, D_hidden_state, cnn_verb):
+  def __init__(self, encoder, D_hidden_state):
     super(FCGGNN, self).__init__()
     self.encoder = encoder
     
@@ -145,18 +160,27 @@ class FCGGNN(nn.Module):
                                   padding_idx=encoder.get_num_roles())
     self.verb_emb = nn.Embedding(encoder.get_num_verbs(), D_hidden_state)
 
-    self.convnet_verbs = cnn_verb
-    self.convnet_nouns = resnet_modified() 
+    self.convnet_verbs = resnet(self.encoder.get_num_verbs())
+    self.convnet_nouns = resnet(self.encoder.get_num_labels()) 
 
     self.ggsnn = GGSNN(layersize=D_hidden_state)
 
-    self.verb_classifier = nn.Sequential(
-      nn.Linear(D_hidden_state, self.encoder.get_num_verbs())
-    )
+    self.verb_classifier = nn.Linear(D_hidden_state, self.encoder.get_num_verbs())
 
-    self.nouns_classifier = nn.Sequential(
-      nn.Linear(D_hidden_state, self.encoder.get_num_labels())
-    )
+    self.nouns_classifier = nn.Linear(D_hidden_state, self.encoder.get_num_labels())
+
+    fan = self.verb_classifier.in_features +  self.verb_classifier.out_features 
+    spread_v = math.sqrt(2.0) * math.sqrt( 2.0 / fan )
+
+    fan = self.nouns_classifier.in_features +  self.nouns_classifier.out_features 
+    spread_n = math.sqrt(2.0) * math.sqrt( 2.0 / fan )
+  
+    self.verb_classifier.weight.data.uniform_(-spread_v, spread_v)
+    self.verb_classifier.bias.data.uniform_(-spread_v, spread_v) 
+    
+    self.nouns_classifier.weight.data.uniform_(-spread_n, spread_n)
+    self.nouns_classifier.bias.data.uniform_(-spread_n, spread_n) 
+
 
   @autocast()
   def __predict_nouns(self, img, gt_verb, batch_size):
@@ -223,7 +247,7 @@ class FCGGNN(nn.Module):
   @autocast()
   def verb_loss(self, pred_verb, gt_verb):
     batch_size = gt_verb.size()[0]
-    verb_lossfn = torch.nn.CrossEntropyLoss()
+    verb_lossfn = torch.nn.CrossEntropyLoss().cuda()
     loss = verb_lossfn(pred_verb, gt_verb)
 
     return loss
@@ -231,7 +255,7 @@ class FCGGNN(nn.Module):
   @autocast()
   def nouns_loss(self, pred_nouns, gt_nouns):
     batch_size = gt_nouns.size()[0]
-    nouns_lossfn = torch.nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels())
+    nouns_lossfn = torch.nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels()).cuda()
 
     gt_label_turned = gt_nouns.transpose(1,2).contiguous().view(batch_size *
                                                       self.encoder.max_role_count*3, -1)
