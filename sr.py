@@ -7,7 +7,6 @@ from sys import float_info
 import matplotlib.pyplot as plt
 from pathlib import Path
 
-
 from model import FCGGNN, inceptionv3
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
@@ -269,7 +268,7 @@ if __name__ == '__main__':
   parser.add_argument('--num_workers', type=int, default=8)
 
   parser.add_argument('--epochs', type=int, default=500)
-  parser.add_argument('--lr', type=float, default=0.025118864315095822) 
+  parser.add_argument('--lr', type=float, default=0.01)#0.025118864315095822) 
   parser.add_argument('--patience', type=int, default=10, help="The value that have to wait the scheduler before decay lr")
   parser.add_argument('--optim', type=str, help="The name of the optimizer [MUST INSERT ONE]")
 
@@ -309,25 +308,27 @@ if __name__ == '__main__':
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, pin_memory=True, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  cnn_verb = inceptionv3(encoder.get_num_verbs())
+  '''
+  cnn_verb = darknet53(1000)
   if torch.cuda.is_available():
-    #cnn_verb = torch.nn.DataParallel(cnn_verb)
+    cnn_verb = torch.nn.DataParallel(cnn_verb)
     cnn_verb.cuda()
 
-  path = pjoin(args.saving_folder, "inceptionv3")
+  path = pjoin(args.saving_folder, "darknet-pretrained")
   ckp = torch.load(path)
   
   if torch.cuda.is_available():
-    #cnn_verb.module.load_state_dict(ckp['model_state_dict'])
-    #cnn_verb.module.model.fc = nn.Identity()
-  #else: 
-    cnn_verb.load_state_dict(ckp['model_state_dict']) 
-    cnn_verb.model.fc = nn.Identity()
+    cnn_verb.module.load_state_dict(ckp['state_dict']) 
   
   for param in cnn_verb.parameters():
     param.required_grad=False
+ 
+  cnn_verb.fc = nn.Identity()
+  #####
 
-  model = FCGGNN(encoder, D_hidden_state=2048, cnn_verb=cnn_verb)
+  cnn_nouns = cnn_verb
+  '''
+  model = FCGGNN(encoder, D_hidden_state=2048)
   if torch.cuda.is_available():
     print('Using', torch.cuda.device_count(), 'GPUs!')
     model = torch.nn.DataParallel(model)
@@ -365,7 +366,7 @@ if __name__ == '__main__':
   
   if args.evaluate:
     print ('=> evaluating model with dev-set...')
-    top1, top5, val_loss = eval(model, dev_loader, encoder)
+    top1, top5, val_losses = eval(model, dev_loader, encoder)
 
     top1_a = top1.get_average_results_both()
     top5_a = top5.get_average_results_both()
@@ -375,6 +376,9 @@ if __name__ == '__main__':
                 top1_a['gt-value'] + top1_a['gt-value-all']
     avg_score /= 8
 
+    print('val losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
+      .format(val_losses['verb_loss'], val_losses['nouns_loss'], val_losses['gt_loss']))
+ 
     gt = {key:top1_a[key] for key in ['gt-value', 'gt-value-all']}
     one_val = {key:top1_a[key] for key in ['verb', 'value', 'value-all']}
     print('{}\n{}\n{}, mean = {:.2f}\n'
@@ -385,7 +389,8 @@ if __name__ == '__main__':
 
   elif args.test:
     print ('=> evaluating model with test-set...')
-    top1, top5, val_loss = eval(model, test_loader, encoder)
+
+    top1, top5, test_losses = eval(model, test_loader, encoder)
 
     top1_a = top1.get_average_results_both()
     top5_a = top5.get_average_results_both()
@@ -395,6 +400,9 @@ if __name__ == '__main__':
                 top1_a['gt-value'] + top1_a['gt-value-all']
     avg_score /= 8
 
+    print('test losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
+      .format(test_losses['verb_loss'], test_losses['nouns_loss'], test_losses['gt_loss']))
+     
     gt = {key:top1_a[key] for key in ['gt-value', 'gt-value-all']}
     one_val = {key:top1_a[key] for key in ['verb', 'value', 'value-all']}
     print('{}\n{}\n{}, mean = {:.2f}\n'
