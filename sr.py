@@ -51,7 +51,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     nouns_loss_accum = 0
     gt_nouns_loss_accum = 0
 
-    print('Epoch-{}, lr: {:.2f}'.format(e,
+    print('Epoch-{}, lr: {:.4f}'.format(e,
            optimizer.param_groups[0]['lr']))
 
     top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
@@ -92,10 +92,6 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
       else:
         print_freq = 1
 
-      #if i % print_freq == 0:
-      #  print('training losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
-      #    .format(verb_loss.item(), nouns_loss.item(), gt_nouns_loss.item()))
-      
       verb_loss_accum += verb_loss.item()
       nouns_loss_accum += nouns_loss.item()
       gt_nouns_loss_accum += gt_nouns_loss.item()
@@ -199,7 +195,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     torch.save(checkpoint, pjoin(folder, model_saving_name))
       
     if scheduler is not None:
-      scheduler.step(val_loss)
+      scheduler.step(loss)
 
 
 def eval(model, loader, encoder):
@@ -268,7 +264,7 @@ if __name__ == '__main__':
   parser.add_argument('--num_workers', type=int, default=8)
 
   parser.add_argument('--epochs', type=int, default=500)
-  parser.add_argument('--lr', type=float, default=0.01)#0.025118864315095822) 
+  parser.add_argument('--lr', type=float, default=0.25118864315095822) 
   parser.add_argument('--patience', type=int, default=10, help="The value that have to wait the scheduler before decay lr")
   parser.add_argument('--optim', type=str, help="The name of the optimizer [MUST INSERT ONE]")
 
@@ -350,19 +346,21 @@ if __name__ == '__main__':
   if args.optim is None:
     raise Exception('no optimizer selected')
   elif args.optim == 'SDG':
-    optimizer = torch.optim.SGD(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
   elif args.optim == 'ADAM':
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
   elif args.optim == 'ADADELTA':
-    optimizer = torch.optim.Adadelta(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adadelta(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
   elif args.optim == 'ADAGRAD':
-    optimizer = torch.optim.Adagrad(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
   elif args.optim == 'ADAMAX':
-    optimizer = torch.optim.Adamax(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adamax(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
   elif args.optim == 'RMSPROP':
-    optimizer = torch.optim.RMSprop(model.parameters(), lr=args.lr, alpha=0.9, momentum=0.9)
+    optimizer = torch.optim.RMSprop(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, alpha=0.9, momentum=0.9)
   
-  #scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience, mode='min', verbose=True)
+  scheduler = None
+  #scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=args.lr*0.001, max_lr=args.lr, step_size_up=5)
+  scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience, mode='min', verbose=True)
   
   if args.evaluate:
     print ('=> evaluating model with dev-set...')
@@ -413,7 +411,7 @@ if __name__ == '__main__':
   else:
     if args.benchmark is False:
       print('Model training started!')
-      train(model, train_loader, dev_loader, optimizer, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder, scheduler=None, checkpoint=checkpoint)
+      train(model, train_loader, dev_loader, optimizer, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)
     
     else:
       print('Benchmarking, batchsize = {}'.format(args.batch_size))
