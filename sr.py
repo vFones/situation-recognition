@@ -266,7 +266,7 @@ def results(model, image, encoder, train_set):
 
 
   for i in nouns_tensor_idx:
-    if encoder.label_list[i] != '':
+    if encoder.label_list[i] != '' and encoder.label_list[i] != 'UNK':
       labels.append(nouns_space[encoder.label_list[i]]['gloss'][0])
   return verb_name, labels
  

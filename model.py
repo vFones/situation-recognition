@@ -165,21 +165,13 @@ class FCGGNN(nn.Module):
 
     self.ggsnn = GGSNN(layersize=D_hidden_state)
 
-    self.verb_classifier = nn.Linear(D_hidden_state, self.encoder.get_num_verbs())
+    self.verb_classifier = nn.Sequential(
+         nn.Dropout(0.5),
+         nn.Linear(D_hidden_state, self.encoder.get_num_verbs()))
 
-    self.nouns_classifier = nn.Linear(D_hidden_state, self.encoder.get_num_labels())
-
-    fan = self.verb_classifier.in_features +  self.verb_classifier.out_features 
-    spread_v = math.sqrt(2.0) * math.sqrt( 2.0 / fan )
-
-    fan = self.nouns_classifier.in_features +  self.nouns_classifier.out_features 
-    spread_n = math.sqrt(2.0) * math.sqrt( 2.0 / fan )
-  
-    self.verb_classifier.weight.data.uniform_(-spread_v, spread_v)
-    self.verb_classifier.bias.data.uniform_(-spread_v, spread_v) 
-    
-    self.nouns_classifier.weight.data.uniform_(-spread_n, spread_n)
-    self.nouns_classifier.bias.data.uniform_(-spread_n, spread_n) 
+    self.nouns_classifier = nn.Sequential(
+         nn.Dropout(0.5),
+         nn.Linear(D_hidden_state, self.encoder.get_num_labels()))
 
 
   @autocast()

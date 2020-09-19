@@ -7,7 +7,11 @@ def load_net(fname, net_list):
   loading a pretrained model weights from a file
   '''
   for i in range(0, len(net_list)):
-    checkpoint = torch.load(fname)
+    if torch.cuda.is_available():
+      checkpoint = torch.load(fname, map_location=torch.device('cuda'))
+    else:
+      checkpoint = torch.load(fname, map_location=torch.device('cpu'))
+
     dict = checkpoint['model_state_dict']
     
     try:
