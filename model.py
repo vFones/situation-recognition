@@ -25,7 +25,7 @@ class resnet(nn.Module):
   def __init__(self, out_layers):
     super(resnet, self).__init__()
 
-    self.model = tv.models.resnet152(pretrained=True, progress=False)
+    self.model = tv.models.resnet101(pretrained=True, progress=False)
     for parameter in self.model.parameters():
       parameter.requires_grad = False
 
@@ -183,7 +183,7 @@ class FCGGNN(nn.Module):
 
 
   @autocast()
-  def __predict_nouns(self, img, gt_verb, batch_size):
+  def predict_nouns(self, img, gt_verb, batch_size):
     img_features = self.convnet_nouns(img)
     role_idx = self.encoder.get_role_ids_batch(gt_verb)
     if torch.cuda.is_available():
@@ -221,7 +221,7 @@ class FCGGNN(nn.Module):
     return logits.contiguous().view(batch_size, role_count, -1)
 
   @autocast()
-  def __predict_verb(self, img, batch_size):
+  def predict_verb(self, img, batch_size):
     img_features = self.convnet_verbs(img)
     img_features = torch.nn.functional.relu(img_features)
 
@@ -238,9 +238,9 @@ class FCGGNN(nn.Module):
   def forward(self, img, gt_verb):
     batch_size = img.size(0)
     
-    pred_verb = self.__predict_verb(img, batch_size)
-    pred_nouns = self.__predict_nouns(img, torch.argmax(pred_verb, 1), batch_size)
-    gt_pred_nouns = self.__predict_nouns(img, gt_verb, batch_size)
+    pred_verb = self.predict_verb(img, batch_size)
+    pred_nouns = self.predict_nouns(img, torch.argmax(pred_verb, 1), batch_size)
+    gt_pred_nouns = self.predict_nouns(img, gt_verb, batch_size)
 
     return pred_verb, pred_nouns, gt_pred_nouns
 
@@ -256,7 +256,15 @@ class FCGGNN(nn.Module):
   def nouns_loss(self, pred_nouns, gt_nouns):
     batch_size = gt_nouns.size()[0]
     nouns_lossfn = torch.nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels()).cuda()
+    nouns_loss = 0
 
+    pred_nouns = pred_nouns.transpose(1, 2)
+    for i in range(0, 3):
+      #print(gt_nouns[torch.arange(gt_nouns.size(0)), i].size())
+      nouns_loss += nouns_lossfn(pred_nouns,  gt_nouns[torch.arange(gt_nouns.size(0)), i])
+    
+    
+    '''
     gt_label_turned = gt_nouns.transpose(1,2).contiguous().view(batch_size *
                                                       self.encoder.max_role_count*3, -1)
 
@@ -266,5 +274,5 @@ class FCGGNN(nn.Module):
     pred_nouns = pred_nouns.contiguous().view(-1, pred_nouns.size(-1))
 
     nouns_loss = nouns_lossfn(pred_nouns,  gt_label_turned.squeeze(1)) * 3
-
+    '''
     return nouns_loss
