@@ -6,6 +6,8 @@ from os.path import join as pjoin, isfile as pisfile
 from sys import float_info
 import matplotlib.pyplot as plt
 from pathlib import Path
+from PIL import Image
+
 
 from model import FCGGNN, inceptionv3
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
@@ -190,7 +192,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     if torch.cuda.is_available():
       checkpoint.update({'model_state_dict': model.module.state_dict()})
     if scheduler is not None:
-      checkpoint['model_state_dict'] = scheduler.state_dict()
+      checkpoint['scheduler_state_dict'] = scheduler.state_dict()
     
     torch.save(checkpoint, pjoin(folder, model_saving_name))
       
@@ -240,6 +242,33 @@ def eval(model, loader, encoder):
 
   return top1, top5, val_loss
 
+def results(model, image, encoder, train_set):
+  model.eval()
+  img = Image.open(image).convert('RGB')
+  img = encoder.dev_transform(img)
+  one_batch_img = img.unsqueeze(0)
+
+  logits = model.predict_verb(one_batch_img, 1)
+
+  verb_tensor = torch.argmax(logits, 1)
+
+  verb_name = encoder.verb_list[verb_tensor]
+
+  logits = model.predict_nouns(one_batch_img, verb_tensor, 1)
+  logits = logits.squeeze(0) #remove batch_size (1, 6, 2001) -> (6, 2001)
+
+  nouns_tensor_idx = torch.argmax(logits, 1)
+
+  labels = []
+  with open(pjoin("imSitu", 'imsitu_space.json'), 'r') as f:
+    imsitu_space = json.load(f)
+  nouns_space = imsitu_space["nouns"]
+
+
+  for i in nouns_tensor_idx:
+    if encoder.label_list[i] != '':
+      labels.append(nouns_space[encoder.label_list[i]]['gloss'][0])
+  return verb_name, labels
  
 if __name__ == '__main__':
   import argparse
@@ -248,7 +277,9 @@ if __name__ == '__main__':
   
   parser.add_argument('--benchmark', action='store_true', help='Only use the benchmark mode')
   parser.add_argument('--evaluate', action='store_true', help='Only use the testing mode')
+  parser.add_argument('--results', action='store_true', help='Only use the results mode')
   parser.add_argument('--test', action='store_true', help='Only use the testing mode')
+  parser.add_argument('--img', type=str, default='', help='Load a picture')
   parser.add_argument('--model_saving_name', type=str, default='0', help='saving name of the outpul model')
 
   parser.add_argument('--saving_folder', type=str, default='checkpoints', help='Location of annotations')
@@ -335,8 +366,14 @@ if __name__ == '__main__':
 
   if len(args.resume_model) > 1:
     print('Resume training from: {}'.format(args.resume_model))
+    
+    if torch.cuda.is_available():
+      device = torch.device('cuda')
+    else:
+      device = torch.device('cpu')
+  
     path_to_model = pjoin(args.saving_folder, args.resume_model)
-    checkpoint = torch.load(path_to_model)
+    checkpoint = torch.load(path_to_model,  map_location=device)
     utils.load_net(path_to_model, [model])
     args.model_saving_name = args.resume_model
   else:
@@ -407,6 +444,10 @@ if __name__ == '__main__':
       .format(utils.format_dict(one_val, '{:.2f}', '1-'),
               utils.format_dict(top5_a, '{:.2f}', '5-'),
               utils.format_dict(gt, '{:.2f}', ''), avg_score*100))
+
+  if args.results:
+    verb, labels= results(model, args.img, encoder, train_set)
+    print("The verb is :", verb, " the labels are :", labels)
 
   else:
     if args.benchmark is False:
