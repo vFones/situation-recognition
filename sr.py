@@ -338,14 +338,23 @@ if __name__ == '__main__':
     checkpoint = torch.load(path_to_model,  map_location=device)
     utils.load_net(path_to_model, [model])
 
-    for parameter in model.convnet_verbs.parameters():
-      parameter.requires_grad = False
-    model.convnet_verbs.model.fc.requires_grad = True
+    if torch.cuda.is_available():
+      for parameter in model.module.convnet_verbs.parameters():
+        parameter.requires_grad = False
+      model.module.convnet_verbs.model.fc.requires_grad = True
 
-    for parameter in model.convnet_nouns.parameters():
-      parameter.requires_grad = False
-    model.convnet_nouns.model.fc.requires_grad = True
+      for parameter in model.module.convnet_nouns.parameters():
+        parameter.requires_grad = False
+      model.module.convnet_nouns.model.fc.requires_grad = True
+    else:
+      for parameter in model.convnet_verbs.parameters():
+        parameter.requires_grad = False
+      model.convnet_verbs.model.fc.requires_grad = True
 
+      for parameter in model.convnet_nouns.parameters():
+        parameter.requires_grad = False
+      model.convnet_nouns.model.fc.requires_grad = True
+    
     args.model_saving_name = args.resume_model
     e = checkpoint['epoch']
   
