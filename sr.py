@@ -160,7 +160,6 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
 
     torch.save(checkpoint, pjoin(folder, model_saving_name))
 
-
 def eval(model, loader, encoder, logging=False):
   model.eval()
 
@@ -365,15 +364,12 @@ if __name__ == '__main__':
   if args.evaluate_dev:
     print ('=> evaluating model with dev-set...')
     top1, top5, val_losses, avg_score = eval(model, dev_loader, encoder, logging=True)
-  
-  if args.evaluate_test:
+  elif args.evaluate_test:
     print ('=> evaluating model with test-set...')
     top1, top5, val_losses, avg_score = eval(model, test_loader, encoder, logging=True)
-
-  if args.results:
-    verb, labels= results(model, args.img, encoder, train_set)
+  elif args.results:
+    verb, labels= results(model, args.img, encoder)
     print("The verb is :", verb, " the labels are :", labels)
-
   else:
     print('Model training started!')
     train(model, train_loader, dev_loader, optimizer, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)
