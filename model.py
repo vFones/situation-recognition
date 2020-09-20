@@ -9,23 +9,11 @@ import torchvision as tv
 import torch.nn.functional as F
 from torch.cuda.amp import autocast
 
-class vgg16_modified(nn.Module):
-  def __init__(self):
-    super(vgg16_modified, self).__init__()
-
-    self.vgg = tv.models.vgg16_bn(pretrained=True)
-    in_features = self.vgg.classifier[6].in_features
-    self.vgg.classifier[6] = nn.Linear(in_features, 504)
-
-  @autocast()
-  def forward(self, x):
-    return self.vgg(x)
-
 class resnet(nn.Module):
   def __init__(self, out_layers):
     super(resnet, self).__init__()
 
-    self.model = tv.models.resnet101(pretrained=True, progress=False)
+    self.model = tv.models.resnet152(pretrained=True, progress=False)
     for parameter in self.model.parameters():
       parameter.requires_grad = False
 
@@ -37,66 +25,8 @@ class resnet(nn.Module):
   
     self.model.fc.weight.data.uniform_(-spread,spread)
     self.model.fc.bias.data.uniform_(-spread,spread) 
-
+    self.model.fc.requires_grad=True
     self.model.fc=nn.Identity()
-
-  @autocast()
-  def forward(self, x):
-    return self.model(x)
-
-class resnet_modified(nn.Module):
-  def __init__(self, out_layers):
-    super(resnet_modified, self).__init__()
-
-    self.resnet = tv.models.resnet152(pretrained=True)
-    
-    num_ftrs = self.model.fc.in_features
-    self.model.fc = nn.Linear(num_ftrs, out_layers)
-
-    fan = self.model.fc.in_features +  self.model.fc.out_features 
-    spread = math.sqrt(2.0) * math.sqrt( 2.0 / fan )
-  
-    self.model.fc.weight.data.uniform_(-spread,spread)
-    self.model.fc.bias.data.uniform_(-spread,spread) 
-
-  @autocast()
-  def forward(self, x):
-    return self.resnet(x)
-
-'''
-class resnet_modified(nn.Module):
-  def __init__(self, out_layers):
-    super(resnet_modified, self).__init__()
-
-    self.model = tv.models.resnet50(pretrained=True)
-
-    num_ftrs = self.model.fc.in_features
-    self.model.fc = nn.Sequential(
-        nn.Dropout2d(.5),
-        nn.Dropout(.5),
-        nn.LeakyReLU(),
-        nn.Linear(num_ftrs, out_layers))
-    
-    fan = num_ftrs + out_layers
-    spread = math.sqrt(2.0) * math.sqrt( 2.0 / fan )
-    self.model.fc[3].weight.data.uniform_(-spread,spread)
-    self.model.fc[3].bias.data.uniform_(-spread,spread)
-
-  @autocast()
-  def forward(self, x):
-    return self.model(x)
-'''
-class inceptionv3(nn.Module):
-  def __init__(self, out):
-    super(inceptionv3, self).__init__()
-
-    self.model = tv.models.inception_v3(pretrained=True)
-    for parameter in self.model.parameters():
-      parameter.requires_grad = False
-
-    self.model.aux_logits=False
-    fc_ftrs = self.model.fc.in_features
-    self.model.fc = nn.Linear(fc_ftrs, out)
 
   @autocast()
   def forward(self, x):
@@ -238,7 +168,6 @@ class FCGGNN(nn.Module):
 
   @autocast()
   def verb_loss(self, pred_verb, gt_verb):
-    batch_size = gt_verb.size()[0]
     verb_lossfn = torch.nn.CrossEntropyLoss().cuda()
     loss = verb_lossfn(pred_verb, gt_verb)
 
@@ -246,25 +175,11 @@ class FCGGNN(nn.Module):
 
   @autocast()
   def nouns_loss(self, pred_nouns, gt_nouns):
-    batch_size = gt_nouns.size()[0]
     nouns_lossfn = torch.nn.CrossEntropyLoss(ignore_index=self.encoder.get_num_labels()).cuda()
     nouns_loss = 0
 
     pred_nouns = pred_nouns.transpose(1, 2)
     for i in range(0, 3):
-      #print(gt_nouns[torch.arange(gt_nouns.size(0)), i].size())
       nouns_loss += nouns_lossfn(pred_nouns,  gt_nouns[torch.arange(gt_nouns.size(0)), i])
     
-    
-    '''
-    gt_label_turned = gt_nouns.transpose(1,2).contiguous().view(batch_size *
-                                                      self.encoder.max_role_count*3, -1)
-
-    pred_nouns = pred_nouns.contiguous().view(batch_size* self.encoder.max_role_count, -1)
-    pred_nouns = pred_nouns.expand(3, pred_nouns.size(0), pred_nouns.size(1))
-    pred_nouns = pred_nouns.transpose(0,1)
-    pred_nouns = pred_nouns.contiguous().view(-1, pred_nouns.size(-1))
-
-    nouns_loss = nouns_lossfn(pred_nouns,  gt_label_turned.squeeze(1)) * 3
-    '''
     return nouns_loss

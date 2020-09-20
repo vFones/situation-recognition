@@ -1,15 +1,13 @@
 import torch
-import torch.nn as nn
 from torch.cuda.amp import GradScaler, autocast
 import json
 from os.path import join as pjoin, isfile as pisfile
-from sys import float_info
 import matplotlib.pyplot as plt
 from pathlib import Path
 from PIL import Image
 
 
-from model import FCGGNN, inceptionv3
+from model import FCGGNN
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
 def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_saving_name, folder, scheduler=None, checkpoint=None):
@@ -18,12 +16,9 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
   avg_scores = []
   verb_losses = []
   nouns_losses = []
-  gt_losses = []
   val_avg_scores = []
   val_verb_losses = []
   val_nouns_losses = []
-  val_gt_losses = []
-
   epoch = 0
   
   if checkpoint is not None:
@@ -31,11 +26,9 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     avg_scores = checkpoint['avg_scores']
     verb_losses = checkpoint['verb_losses']
     nouns_losses = checkpoint['nouns_losses']
-    gt_losses = checkpoint['gt_losses']    
     val_avg_scores = checkpoint['val_avg_scores']
     val_verb_losses = checkpoint['val_verb_losses']
     val_nouns_losses = checkpoint['val_nouns_losses']
-    val_gt_losses = checkpoint['val_gt_losses']
 
     if torch.cuda.is_available():
       model.module.load_state_dict(checkpoint['model_state_dict'])
@@ -78,7 +71,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
           nouns_loss =  model.nouns_loss(pred_nouns, nouns)
           gt_nouns_loss =  model.nouns_loss(pred_gt_nouns, nouns)
         
-        loss = verb_loss+gt_nouns_loss
+        loss = verb_loss+nouns_loss
       
       scaler.scale(loss).backward()
       scaler.unscale_(optimizer)
@@ -89,10 +82,6 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
       top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
 
-      if torch.cuda.is_available():
-        print_freq = 64
-      else:
-        print_freq = 1
 
       verb_loss_accum += verb_loss.item()
       nouns_loss_accum += nouns_loss.item()
@@ -116,7 +105,6 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
 
     verb_losses.append(verb_loss_mean)
     nouns_losses.append(nouns_loss_mean)
-    gt_losses.append(gt_nouns_loss_mean)
     
     print('training losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
       .format(verb_loss_mean, nouns_loss_mean, gt_nouns_loss_mean))
@@ -145,19 +133,16 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     #plots
     val_verb_losses.append(val_losses['verb_loss'])
     val_nouns_losses.append(val_losses['nouns_loss'])
-    val_gt_losses.append(val_losses['gt_loss'])
     
+
     plt.plot(verb_losses, label='verb losses')
     plt.plot(nouns_losses, label='nouns losses')
-    plt.plot(gt_losses, label='gt losses')
     plt.plot(avg_scores, label='accuracy mean')
 
     plt.plot(val_verb_losses, '-.', label='val verb losses')
     plt.plot(val_nouns_losses, '-.', label='val nouns losses')
-    plt.plot(val_gt_losses, '-.', label='val losses')
     plt.plot(val_avg_scores, '-.', label='val accuracy mean')
-    
-    plt.plot()
+    plt.grid()
     plt.legend()
     plt.savefig(pjoin(folder, model_saving_name+'.png'))
     plt.clf()
@@ -178,12 +163,10 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
       'avg_scores': avg_scores,
       'verb_losses': verb_losses,
       'nouns_losses': nouns_losses,
-      'gt_losses': gt_losses,
       
       'val_avg_scores': val_avg_scores,
       'val_verb_losses': val_verb_losses,
       'val_nouns_losses': val_nouns_losses,
-      'val_gt_losses': val_gt_losses,
       
       'model_state_dict': model.state_dict(),
       'optimizer_state_dict': optimizer.state_dict()
@@ -197,7 +180,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     torch.save(checkpoint, pjoin(folder, model_saving_name))
       
     if scheduler is not None:
-      scheduler.step(loss)
+      scheduler.step()
 
 
 def eval(model, loader, encoder):
@@ -210,7 +193,7 @@ def eval(model, loader, encoder):
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
   with torch.no_grad():
-    for i, (img_id, img, verb, nouns) in enumerate(loader):
+    for __, (_, img, verb, nouns) in enumerate(loader):
       if torch.cuda.is_available():
         img = img.cuda()
         verb = verb.cuda()
@@ -242,7 +225,7 @@ def eval(model, loader, encoder):
 
   return top1, top5, val_loss
 
-def results(model, image, encoder, train_set):
+def results(model, image, encoder):
   model.eval()
   img = Image.open(image).convert('RGB')
   img = encoder.dev_transform(img)
@@ -280,7 +263,7 @@ if __name__ == '__main__':
   parser.add_argument('--results', action='store_true', help='Only use the results mode')
   parser.add_argument('--test', action='store_true', help='Only use the testing mode')
   parser.add_argument('--img', type=str, default='', help='Load a picture')
-  parser.add_argument('--model_saving_name', type=str, default='0', help='saving name of the outpul model')
+  parser.add_argument('--model_saving_name', type=str, default='sr', help='saving name of the outpul model')
 
   parser.add_argument('--saving_folder', type=str, default='checkpoints', help='Location of annotations')
   parser.add_argument('--dataset_folder', type=str, default='imSitu', help='Location of annotations')
@@ -291,13 +274,11 @@ if __name__ == '__main__':
   parser.add_argument('--test_file', type=str, default='test.json', help='test json file')
   
   
-  parser.add_argument('--batch_size', type=int, default=64)
-  parser.add_argument('--num_workers', type=int, default=8)
+  parser.add_argument('--batch_size', type=int, default=384)
+  parser.add_argument('--num_workers', type=int, default=10)
 
-  parser.add_argument('--epochs', type=int, default=500)
+  parser.add_argument('--epochs', type=int, default=100)
   parser.add_argument('--lr', type=float, default=0.25118864315095822) 
-  parser.add_argument('--patience', type=int, default=10, help="The value that have to wait the scheduler before decay lr")
-  parser.add_argument('--optim', type=str, help="The name of the optimizer [MUST INSERT ONE]")
 
   args = parser.parse_args()
 
@@ -335,43 +316,20 @@ if __name__ == '__main__':
   test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
   test_loader = torch.utils.data.DataLoader(test_set, pin_memory=True, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  '''
-  cnn_verb = darknet53(1000)
-  if torch.cuda.is_available():
-    cnn_verb = torch.nn.DataParallel(cnn_verb)
-    cnn_verb.cuda()
 
-  path = pjoin(args.saving_folder, "darknet-pretrained")
-  ckp = torch.load(path)
-  
-  if torch.cuda.is_available():
-    cnn_verb.module.load_state_dict(ckp['state_dict']) 
-  
-  for param in cnn_verb.parameters():
-    param.required_grad=False
- 
-  cnn_verb.fc = nn.Identity()
-  #####
-
-  cnn_nouns = cnn_verb
-  '''
   model = FCGGNN(encoder, D_hidden_state=2048)
   if torch.cuda.is_available():
     print('Using', torch.cuda.device_count(), 'GPUs!')
     model = torch.nn.DataParallel(model)
     model.cuda()
 
-  #torch.manual_seed(1111)
   torch.backends.cudnn.benchmark = True
-
   if len(args.resume_model) > 1:
     print('Resume training from: {}'.format(args.resume_model))
-    
     if torch.cuda.is_available():
       device = torch.device('cuda')
     else:
       device = torch.device('cpu')
-  
     path_to_model = pjoin(args.saving_folder, args.resume_model)
     checkpoint = torch.load(path_to_model,  map_location=device)
     utils.load_net(path_to_model, [model])
@@ -380,25 +338,14 @@ if __name__ == '__main__':
     print('Training from the scratch.')
     utils.set_trainable(model, True)
   
-  if args.optim is None:
-    raise Exception('no optimizer selected')
-  elif args.optim == 'SDG':
-    optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
-  elif args.optim == 'ADAM':
-    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
-  elif args.optim == 'ADADELTA':
-    optimizer = torch.optim.Adadelta(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
-  elif args.optim == 'ADAGRAD':
-    optimizer = torch.optim.Adagrad(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
-  elif args.optim == 'ADAMAX':
-    optimizer = torch.optim.Adamax(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr)
-  elif args.optim == 'RMSPROP':
-    optimizer = torch.optim.RMSprop(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, alpha=0.9, momentum=0.9)
+  
+  optimizer = torch.optim.SGD(model.parameters(),
+    lr=args.lr, momentum=0.9, nesterov=True, weight_decay=1e-4)
   
   scheduler = None
-  #scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=args.lr*0.001, max_lr=args.lr, step_size_up=5)
-  scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=args.patience, mode='min', verbose=True)
-  
+  scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=args.lr*0.01, max_lr=args.lr,
+    step_size_up=3*len(train_loader), cycle_momentum=False, mode='exp_range')
+ 
   if args.evaluate:
     print ('=> evaluating model with dev-set...')
     top1, top5, val_losses = eval(model, dev_loader, encoder)
@@ -450,53 +397,5 @@ if __name__ == '__main__':
     print("The verb is :", verb, " the labels are :", labels)
 
   else:
-    if args.benchmark is False:
       print('Model training started!')
       train(model, train_loader, dev_loader, optimizer, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)
-    
-    else:
-      print('Benchmarking, batchsize = {}'.format(args.batch_size))
-      import time
-      import multiprocessing
-      core_number = multiprocessing.cpu_count()
-      best_num_worker = [0, 0]
-      best_time = [99999999, 99999999]
-      print('cpu_count =',core_number)
-
-      def loading_time(num_workers, pin_memory):
-        kwargs = {'num_workers': num_workers, 'pin_memory': pin_memory}
-        train_loader = torch.utils.data.DataLoader(train_set, batch_size=args.batch_size, shuffle=True, **kwargs)
-        
-        start = time.time()
-        for epoch in range(4):
-          for batch_idx, (_, img, verb, labels) in enumerate(train_loader):
-            if batch_idx == 15:
-              break
-            pass
-        end = time.time()
-        print("  Used {} second with num_workers = {}".format(end-start,num_workers))
-        return end-start
-
-      for pin_memory in [False, True]:
-        print("While pin_memory =",pin_memory)
-        for num_workers in range(0, core_number*2+1, 4): 
-          current_time = loading_time(num_workers, pin_memory)
-          if current_time < best_time[pin_memory]:
-            best_time[pin_memory] = current_time
-            best_num_worker[pin_memory] = num_workers
-          else: # assuming its a convex function  
-            if best_num_worker[pin_memory] == 0:
-              the_range = []
-            else:
-              the_range = list(range(best_num_worker[pin_memory] - 3, best_num_worker[pin_memory]))
-            for num_workers in (the_range + list(range(best_num_worker[pin_memory] + 1,best_num_worker[pin_memory] + 4))): 
-              current_time = loading_time(num_workers, pin_memory)
-              if current_time < best_time[pin_memory]:
-                best_time[pin_memory] = current_time
-                best_num_worker[pin_memory] = num_workers
-            break
-
-      if best_time[0] < best_time[1]:
-        print("Best num_workers =", best_num_worker[0], "with pin_memory = False")
-      else:
-        print("Best num_workers =", best_num_worker[1], "with pin_memory = True")
