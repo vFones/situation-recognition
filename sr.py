@@ -1,15 +1,18 @@
 import torch
 from torch.cuda.amp import GradScaler, autocast
-import json
+from json import load as jload
 from os.path import join as pjoin, isfile as pisfile
 import matplotlib.pyplot as plt
+from argparse import ArgumentParser
+from random import randrange
 from pathlib import Path
 from PIL import Image
+from IPython.display import display # to display images
 
 from model import FCGGNN
 from utils import imsitu_encoder, imsitu_loader, imsitu_scorer, utils
 
-def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_saving_name, folder, scheduler=None, checkpoint=None):
+def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_saving_name, folder, checkpoint=None):
   model.train()
 
   avg_scores = []
@@ -21,6 +24,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
 
   epoch = 0
   
+  # if checkpoint resume stuffs
   if checkpoint is not None:
     epoch = checkpoint['epoch']
     avg_scores = checkpoint['avg_scores']
@@ -35,10 +39,8 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     else:
       model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    if scheduler is not None:
-      scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
-
-  
+   
+  #mix precision stuff
   scaler = GradScaler()
 
   for e in range(epoch, max_epoch):
@@ -48,7 +50,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
 
     print('Epoch-{}, lr: {:.4f}'.format(e,
            optimizer.param_groups[0]['lr']))
-
+    
     top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
     top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
 
@@ -59,9 +61,9 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
         nouns = nouns.cuda()
       
       optimizer.zero_grad()
-      with autocast():
+      with autocast():  #mix precision stuff
         pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
-
+        #predict and calculate lossess
         if torch.cuda.is_available():
           verb_loss = model.module.verb_loss(pred_verb, verb)
           nouns_loss =  model.module.nouns_loss(pred_nouns, nouns)
@@ -73,6 +75,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
         
       loss = verb_loss+nouns_loss
       
+      # backpropagate errors and stuffs
       scaler.scale(loss).backward()
       scaler.unscale_(optimizer)
       torch.nn.utils.clip_grad_norm_(model.parameters(), 1)    
@@ -81,7 +84,6 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
 
       top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
       top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
-
 
       verb_loss_accum += verb_loss.item()
       nouns_loss_accum += nouns_loss.item()
@@ -106,6 +108,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     verb_losses.append(verb_loss_mean)
     nouns_losses.append(nouns_loss_mean)
     
+    #print stuffs
     print('training losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
       .format(verb_loss_mean, nouns_loss_mean, gt_nouns_loss_mean))
       
@@ -117,14 +120,14 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
                 utils.format_dict(gt, '{:.2f}', ''), avg_score, '-'*50))
 
     # evaluating 
-    top1, top5, val_losses, val_avg_score = eval(model, dev_loader, encoder, logging=True)
+    top1, top5, val_losses, val_avg_score = eval(model,
+                                   dev_loader, encoder, logging=True)
     model.train()
 
     #val mean scores
     val_avg_scores.append(val_avg_score)
     val_verb_losses.append(val_losses['verb_loss'])
     val_nouns_losses.append(val_losses['nouns_loss'])
-
 
     plt.plot(verb_losses, label='verb losses')
     plt.plot(nouns_losses, label='nouns losses')
@@ -138,6 +141,7 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
     plt.savefig(pjoin(folder, model_saving_name+'.png'))
     plt.clf()
 
+    #always saving but no need if it's not the best score
     checkpoint = { 
       'epoch': e+1,
       'avg_scores': avg_scores,
@@ -154,11 +158,9 @@ def train(model, train_loader, dev_loader, optimizer, max_epoch, encoder, model_
 
     if torch.cuda.is_available():
       checkpoint.update({'model_state_dict': model.module.state_dict()})
-    if scheduler is not None:
-      checkpoint['scheduler_state_dict'] = scheduler.state_dict()
-      scheduler.step()
 
     torch.save(checkpoint, pjoin(folder, model_saving_name))
+
 
 def eval(model, loader, encoder, logging=False):
   model.eval()
@@ -169,6 +171,7 @@ def eval(model, loader, encoder, logging=False):
 
   top1 = imsitu_scorer.imsitu_scorer(encoder, 1, 3)
   top5 = imsitu_scorer.imsitu_scorer(encoder, 5, 3)
+
   with torch.no_grad():
     for __, (_, img, verb, nouns) in enumerate(loader):
       if torch.cuda.is_available():
@@ -176,11 +179,13 @@ def eval(model, loader, encoder, logging=False):
         verb = verb.cuda()
         nouns = nouns.cuda()
       
-      with autocast():
+      with autocast(): # automix precision stuff
         pred_verb, pred_nouns, pred_gt_nouns = model(img, verb)
 
-        top1.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
-        top5.add_point_both(pred_verb, verb, pred_nouns, nouns, pred_gt_nouns)
+        top1.add_point_both(pred_verb, verb,
+                            pred_nouns, nouns, pred_gt_nouns)
+        top5.add_point_both(pred_verb, verb,
+                            pred_nouns, nouns, pred_gt_nouns)
       
         if torch.cuda.is_available():
           vl = model.module.verb_loss(pred_verb, verb)
@@ -198,8 +203,10 @@ def eval(model, loader, encoder, logging=False):
   verbloss /= len(loader)
   nounsloss /= len(loader)
   gtloss /= len(loader)
-  val_losses = {'verb_loss':verbloss, 'nouns_loss': nounsloss, 'gt_loss': gtloss}
+  val_losses = {'verb_loss':  verbloss,
+                'nouns_loss': nounsloss, 'gt_loss': gtloss}
   
+  #print scores
   avg_score = 0
   if logging is True:
     top1_a = top1.get_average_results_both()
@@ -212,7 +219,8 @@ def eval(model, loader, encoder, logging=False):
     avg_score = avg_score * 100
 
     print('val losses = [v: {:.2f}, n: {:.2f}, gt: {:.2f}]'
-      .format(val_losses['verb_loss'], val_losses['nouns_loss'], val_losses['gt_loss']))
+      .format(val_losses['verb_loss'], val_losses['nouns_loss'],
+              val_losses['gt_loss']))
 
     gt = {key:top1_a[key] for key in ['gt-value', 'gt-value-all']}
     one_val = {key:top1_a[key] for key in ['verb', 'value', 'value-all']}
@@ -223,73 +231,214 @@ def eval(model, loader, encoder, logging=False):
 
   return top1, top5, val_losses, avg_score
 
-def results(model, image, encoder):
+
+def results(model, image, encoder, gt_verb):
   model.eval()
+  # importing imsitu space json for references and correct outputting
+  with open(pjoin("imSitu", 'imsitu_space.json'), 'r') as f:
+    imsitu_space = jload(f)
+  nouns_space = imsitu_space["nouns"]
+  verbs_space = imsitu_space["verbs"]
+
   img = Image.open(image).convert('RGB')
-  img = encoder.dev_transform(img)
-  one_batch_img = img.unsqueeze(0)
+  img = encoder.dev_transform(img) # preprocessing image
+  # creating a batch of size 1 for correct model outputting
+  one_batch_img = img.unsqueeze(0) 
 
-  logits = model.predict_verb(one_batch_img, 1)
-
-  verb_tensor = torch.argmax(logits, 1)
-
-  verb_name = encoder.verb_list[verb_tensor]
+  # if passing a verb then using it in nouns prediction
+  if gt_verb and encoder.verb_list.count(gt_verb):
+    verb_tensor = torch.tensor([encoder.verb_list.index(gt_verb)])
+    verb_prob = 100
+  else:
+    #otherwise predict it
+    print("No ground truth verb found, calculating by myself...")
+    logits = model.predict_verb(one_batch_img, 1)
+    verb_tensor = torch.argmax(logits, 1)
+    verb_prob = torch.max(
+                torch.nn.functional.softmax(logits, dim=1)).item()*100
 
   logits = model.predict_nouns(one_batch_img, verb_tensor, 1)
   logits = logits.squeeze(0) #remove batch_size (1, 6, 2001) -> (6, 2001)
+  nouns_tensor = torch.argmax(logits, 1)
+  
+  probabilities = torch.max(torch.nn.functional.softmax(logits, dim=0), 1)
+  labels_prob = []
+  for p in probabilities[0]:
+    labels_prob.append(p.item()*100)
 
-  nouns_tensor_idx = torch.argmax(logits, 1)
+  # create a dictionary with all {roles: label predicted}
+  count = 0
+  labels = {}
+  verb_name = encoder.verb_list[verb_tensor]
+  roles = list(verbs_space[verb_name]["roles"].keys())
+  for i in nouns_tensor[:len(verbs_space[verb_name]["roles"])]:
+    if encoder.label_list[i] == '' or encoder.label_list[i] == 'UNK':
+      labels[roles[count]] = '-'
+    else:
+      labels[roles[count]] = nouns_space[encoder.label_list[i]]['gloss'][0]
+    count+=1
 
-  labels = []
+  return verb_name, verb_prob, labels, labels_prob
+
+
+def analize_subset(model, dev_set, encoder, size):
+  model.eval()
+
+  # importing imsitu json with all references
   with open(pjoin("imSitu", 'imsitu_space.json'), 'r') as f:
-    imsitu_space = json.load(f)
+    imsitu_space = jload(f)
   nouns_space = imsitu_space["nouns"]
+  verbs_space = imsitu_space["verbs"]
+
+  # creating a subset dataloader with random values up to size
+  subset = torch.utils.data.Subset(dev_set,
+           [randrange(0, dev_set.__len__()) for i in range(0, size)])
+  dev_loader_subset = torch.utils.data.DataLoader(subset,
+                          batch_size=size, num_workers=0, shuffle=False)
+
+  #get the batch
+  batch = next(iter(dev_loader_subset))
+
+  #extract stuff from batch
+  imgs_name = batch[0]
+  imgs      = batch[1]
+  gt_verbs  = batch[2]
+  gt_nouns  = batch[3]
+
+  #for all elements in that batch
+  for el in range(0, size):
+    img_name = imgs_name[el]
+    # create a batch of 1 size for correct model processing
+    img = imgs[el].unsqueeze(0)
+    gt_verb = gt_verbs[el].unsqueeze(0)
+    gt_noun = gt_nouns[el] # no need to create a batch of 1
+
+    logits = model.predict_verb(img, 1)    
+    verb_prob = torch.max(
+                torch.nn.functional.softmax(logits, dim=1)).item()*100
+    verb_tensor = torch.argmax(logits, 1)
+    
+    logits = model.predict_nouns(img, verb_tensor, 1)
+    logits = logits.squeeze(0) #remove batch_size (1, 6, 2001) -> (6, 2001)
+
+    probabilities = torch.max(torch.nn.functional.softmax(logits, dim=0), 1)
+    labels_prob = []
+    for p in probabilities[0]:
+      labels_prob.append(p.item()*100)
+    
+    labels_tensor = torch.argmax(logits, 1)
+
+    verb_name = encoder.verb_list[verb_tensor]
+    gt_verb_name = encoder.verb_list[gt_verb]
+
+    # creating a dictionary {roles: labels predicted}
+    roles = list(verbs_space[verb_name]["roles"].keys())
+    labels = {}
+    count = 0
+    for i in labels_tensor[:len(verbs_space[verb_name]["roles"])]:
+      if encoder.label_list[i] == '' or encoder.label_list[i] == 'UNK':
+        labels[roles[count]] = '-'
+      else:
+        labels[roles[count]] = nouns_space[encoder.label_list[i]]['gloss'][0]
+      count+=1
+    
+    # creating a dictionary {roles: gt labels (ann1, ann2, ann3)}
+    # in that dictionary roles have a tuple containing three annotations
+    t_gt_noun = gt_noun.transpose(0, 1)
+    gt_roles = list(verbs_space[gt_verb_name]["roles"].keys())
+    gt_labels = {}
+    count = 0
+    for i in t_gt_noun[:len(verbs_space[gt_verb_name]["roles"])]:
+      t = ()
+      for r in range(0, 3):
+        idx = i[r] if i[r] != 2001 else -1
+        if  idx==-1 or \
+            encoder.label_list[idx]=='' or \
+            encoder.label_list[idx]=='UNK':
+          t += ('-',)
+        else:
+          t += (nouns_space[encoder.label_list[idx]]['gloss'][0], )
+      gt_labels[gt_roles[count]] = (t[0], t[1], t[2])
+      count+=1
+
+    # print all information for all image in subset
+    print('&'*35)
+    print('Analizing: ', img_name)
+    pil_im = Image.open('resized_256/'+img_name, 'r')
+    display(pil_im)
+
+    print('action ({:.2f}%): {}'.format(verb_prob, verb_name))
+
+    c = 0
+    for k, v in labels.items():
+      print('{} ({:.2f}%): {}'.format(k,labels_prob[c],v))
+      c+=1
+    
+    print('---- Ground truth ----')
+    print('action: {}'.format(gt_verb_name))
+    for k, v in gt_labels.items():
+      print('{} = [{}, {}, {}]'.format(k,v[0],v[1],v[2]))
 
 
-  for i in nouns_tensor_idx:
-    if encoder.label_list[i] != '' and encoder.label_list[i] != 'UNK':
-      labels.append(nouns_space[encoder.label_list[i]]['gloss'][0])
-  return verb_name, labels
- 
 if __name__ == '__main__':
-  import argparse
-  parser = argparse.ArgumentParser(description='Situation recognition GGNN. Training, evaluation and prediction.')
-  parser.add_argument('--resume_model', type=str, default='', help='The model we resume')
+  parser = ArgumentParser(description='Situation recognition with GNN.')      
+  parser.add_argument('--resume_model', type=str, default='',
+                      help='The model we resume')
   
-  parser.add_argument('--evaluate_dev', action='store_true', help='Only use the testing mode')
-  parser.add_argument('--evaluate_test', action='store_true', help='Only use the testing mode')
+  parser.add_argument('--evaluate_dev', action='store_true',
+                      help='Only use the testing mode')
+  parser.add_argument('--evaluate_test', action='store_true',
+                      help='Only use the testing mode')
 
-  parser.add_argument('--results', action='store_true', help='Only use the results mode')
-  parser.add_argument('--img', type=str, default='', help='Load a picture')
+  parser.add_argument('--test_img', type=str, default='',
+                      help='Only use the results mode with a given img')
+  parser.add_argument('--verb', type=str, default='',
+                      help='Use a gt verb')
+  parser.add_argument('--subset', type=int, default=0,
+                      help='Analize a subset of a specified size')
 
-  parser.add_argument('--model_saving_name', type=str, default='sr', help='saving name of the outpul model')
-  parser.add_argument('--saving_folder', type=str, default='checkpoints', help='Location of annotations')
-  parser.add_argument('--imgset_dir', type=str, default='resized_256', help='Location of original images')
-  parser.add_argument('--dataset_folder', type=str, default='imSitu', help='Location of annotations')
+  parser.add_argument('--model_saving_name', type=str, default='sr',
+                      help='saving name of the outpul model')
+  parser.add_argument('--saving_folder', type=str, default='checkpoints',
+                      help='Location of annotations')
+  parser.add_argument('--imgset_dir', type=str, default='resized_256',
+                      help='Location of original images')
+  parser.add_argument('--dataset_folder', type=str, default='imSitu',
+                      help='Location of annotations')
 
-  parser.add_argument('--train_file', type=str, default='train.json', help='Train json file')
-  parser.add_argument('--dev_file', type=str, default='dev.json', help='Dev json file')
-  parser.add_argument('--test_file', type=str, default='test.json', help='test json file')
+  parser.add_argument('--train_file', type=str, default='train.json',
+                      help='Train json file')
+  parser.add_argument('--dev_file', type=str, default='dev.json',
+                      help='Dev json file')
+  parser.add_argument('--test_file', type=str, default='test.json',
+                      help='test json file')
   
-  parser.add_argument('--batch_size', type=int, default=384)
+  parser.add_argument('--batch_size', type=int, default=6144)
   parser.add_argument('--num_workers', type=int, default=10)
 
   parser.add_argument('--epochs', type=int, default=1000)
-  parser.add_argument('--lr', type=float, default=0.25118864315095822) 
+  parser.add_argument('--lr', type=float, default=0.002) 
 
   args = parser.parse_args()
-
-  n_epoch = args.epochs
-
-  with open(pjoin(args.dataset_folder, 'train.json'), 'r') as f:
-    encoder_json = json.load(f)
   
-  with open(pjoin(args.dataset_folder, args.train_file), 'r') as f:
-    train_json = json.load(f)
-  
+  #creaate saving folder
   Path(args.saving_folder).mkdir(exist_ok=True)
   checkpoint = None
 
+  #open train, dev, test json
+  with open(pjoin(args.dataset_folder, 'train.json'), 'r') as f:
+    encoder_json = jload(f) #encoder json is always train.json
+  
+  with open(pjoin(args.dataset_folder, args.train_file), 'r') as f:
+    train_json = jload(f)
+
+  with open(pjoin(args.dataset_folder, args.dev_file), 'r') as f:
+    dev_json = jload(f)
+
+  with open(pjoin(args.dataset_folder, args.test_file), 'r') as f:
+    test_json = jload(f)
+
+  # if encoder exists dont create again (time saver)
   if not pisfile(pjoin(args.saving_folder ,'encoder')):
     encoder = imsitu_encoder.imsitu_encoder(encoder_json)
     torch.save(encoder, pjoin(args.saving_folder, 'encoder'))
@@ -297,36 +446,35 @@ if __name__ == '__main__':
     print("Loading encoder file")
     encoder = torch.load(pjoin(args.saving_folder, 'encoder'))
 
+  # create dataloader
+  train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_json,
+                                          encoder, encoder.train_transform)
+  train_loader = torch.utils.data.DataLoader(train_set, pin_memory=True,
+    batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  train_set = imsitu_loader.imsitu_loader(args.imgset_dir, train_json, encoder, encoder.train_transform)
-  train_loader = torch.utils.data.DataLoader(train_set, pin_memory=True, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
+  dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_json,
+                                            encoder, encoder.dev_transform)
+  dev_loader = torch.utils.data.DataLoader(dev_set, pin_memory=True,
+    batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
 
-  with open(pjoin(args.dataset_folder, args.dev_file), 'r') as f:
-    dev_json = json.load(f)
+  test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json,
+                                            encoder, encoder.dev_transform)
+  test_loader = torch.utils.data.DataLoader(test_set, pin_memory=True,
+    batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
 
-  dev_set = imsitu_loader.imsitu_loader(args.imgset_dir, dev_json, encoder, encoder.dev_transform)
-  dev_loader = torch.utils.data.DataLoader(dev_set, pin_memory=True, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers)
-
-  with open(pjoin(args.dataset_folder, args.test_file), 'r') as f:
-    test_json = json.load(f)
-
-  test_set = imsitu_loader.imsitu_loader(args.imgset_dir, test_json, encoder, encoder.dev_transform)
-  test_loader = torch.utils.data.DataLoader(test_set, pin_memory=True, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers)
-
-
+  # create GNN model and if possibile put on multiGPUs
   model = FCGGNN(encoder, D_hidden_state=2048)
   if torch.cuda.is_available():
     print('Using', torch.cuda.device_count(), 'GPUs!')
     model = torch.nn.DataParallel(model)
     model.cuda()
 
-  optimizer = torch.optim.Adamax(filter(lambda p: p.requires_grad, model.parameters()))
+  optimizer = torch.optim.Adamax(
+      filter(lambda p: p.requires_grad, model.parameters()), lr = args.lr)
   
-  scheduler = None
   torch.backends.cudnn.benchmark = True
-
-
-  e=-1
+  
+  #if resuming, load it on cpu or GPUs
   if len(args.resume_model) > 1:
     print('Resume training from: {}'.format(args.resume_model))
     if torch.cuda.is_available():
@@ -346,21 +494,37 @@ if __name__ == '__main__':
     model.convnet_nouns.model.fc.requires_grad = True
 
     args.model_saving_name = args.resume_model
-    e = checkpoint['epoch']
-  
-  #scheduler = torch.optim.lr_scheduler.CyclicLR(optimizer, base_lr=args.lr*0.001, max_lr=args.lr,
-  #  step_size_up=2*len(train_loader), mode='exp_range')
-  #scheduler.last_epoch = e
 
   if args.evaluate_dev:
     print ('=> evaluating model with dev-set...')
-    top1, top5, val_losses, avg_score = eval(model, dev_loader, encoder, logging=True)
+    top1, top5, val_losses, avg_score = eval(model, dev_loader,
+                                          encoder, logging=True)
   elif args.evaluate_test:
     print ('=> evaluating model with test-set...')
-    top1, top5, val_losses, avg_score = eval(model, test_loader, encoder, logging=True)
-  elif args.results:
-    verb, labels= results(model, args.img, encoder)
-    print("The verb is :", verb, " the labels are :", labels)
+    top1, top5, val_losses, avg_score = eval(model, test_loader,
+                                          encoder, logging=True)
+
+  #print stats calculated by results function
+  elif args.test_img:
+    verb, verb_prob, labels, labels_prob = results(model, args.test_img,
+                                            encoder, args.verb)
+    print('&'*50)
+    print('Analizing: ', args.test_img)
+    pil_im = Image.open(args.test_img, 'r')
+    display(pil_im)
+    print('&'*50)
+
+    print('action ({:.2f}%): {}'.format(verb_prob, verb))
+    c = 0
+    for k, v in labels.items():
+      print('{} ({:.2f}%): {}'.format(k,labels_prob[c],v))
+      c+=1
+
+  # analize_subset
+  elif args.subset > 0:
+    analize_subset(model, dev_set, encoder, args.subset)
+
   else:
     print('Model training started!')
-    train(model, train_loader, dev_loader, optimizer, n_epoch, encoder, args.model_saving_name, folder=args.saving_folder, scheduler=scheduler, checkpoint=checkpoint)
+    train(model, train_loader, dev_loader, optimizer, args.epochs, encoder, \
+    args.model_saving_name, folder=args.saving_folder, checkpoint=checkpoint)

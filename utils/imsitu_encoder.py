@@ -7,17 +7,16 @@ import json
 class imsitu_encoder():
   def __init__(self, train_set):
     # json structure -> {<img_name>:{frames:[{<role1>:<label1>, ...},{}...], verb:<verb1>}}
-
     self.verb_list = []
     self.role_list = []
     self.max_label_count = 3
     self.roles_per_verb = {}
     self.label_list = []
     self.max_role_count = 0
-    self.vrole_question = {}
 
-    # image preprocessing used for images in pretrained models in pytorch. See docs
-    self.normalize = tv.transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    # image preprocessing used for images in pretrained models in pytorch.
+    self.normalize = tv.transforms.Normalize(mean=[0.485, 0.456, 0.406],
+      std=[0.229, 0.224, 0.225])
 
     self.train_transform = tv.transforms.Compose([
       #tv.transforms.Resize(312),
@@ -215,7 +214,8 @@ class imsitu_encoder():
       encoding_tensor = torch.unsqueeze(encoding.clone().detach(), 0)
       role_count = self.get_role_count(id)
       pad_count = self.max_role_count - role_count
-      expanded = encoding_tensor.expand(self.max_role_count, encoding_tensor.size(1))
+      expanded =  encoding_tensor.expand(self.max_role_count,
+                  encoding_tensor.size(1))
       transpose = torch.t(expanded)
       adj = expanded*transpose
       for idx1 in range(0,role_count):

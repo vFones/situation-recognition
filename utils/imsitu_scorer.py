@@ -9,7 +9,7 @@ class imsitu_scorer():
     self.encoder = encoder
 
   def add_point_both(self, pred_verbs, verbs,
-                           pred_roles_nouns, roles_nouns, gt_pred_roles_nouns):
+                     pred_roles_nouns, roles_nouns, gt_pred_roles_nouns):
     batch_size = verbs.size()[0]
 
     for i in range(batch_size):
@@ -28,7 +28,7 @@ class imsitu_scorer():
       role_noun = roles_nouns[i]
 
       _, pred_verb_idx = torch.topk(pred_verb, self.topk)
-      _, pred_role_noun_idx = torch.topk(pred_role_nouns, self.topk)  
+      _, pred_role_noun_idx = torch.topk(pred_role_nouns, self.topk)
 
       gt_roles_count = self.encoder.get_role_count(verb)
       
@@ -44,8 +44,6 @@ class imsitu_scorer():
         for r in range(0, gt_roles_count):
           #for all nouns in three annotations
           for n in range(0, 3):
-            #print("pred_role_noun_idx double for: ", pred_role_noun_idx[r][k], role_noun[n][r])
-            #print(self.encoder.label_list[pred_role_noun_idx[r][k]], self.encoder.label_list[role_noun[n][r]])
             if pred_role_noun_idx[r][k] == role_noun[n][r]:
               found += 1
 
@@ -78,7 +76,8 @@ class imsitu_scorer():
   def get_average_results_both(self):
     #average across score cards for the entire frame.
     if self.topk == 1:
-      rv = {"verb":0, "value":0 , "value-all":0, "gt-value":0, "gt-value-all":0}
+      rv = {"verb":0, "value":0 , "value-all":0,
+            "gt-value":0, "gt-value-all":0}
     else:
       rv = {"verb":0, "value":0 , "value-all":0}
 
