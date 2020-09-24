@@ -1,8 +1,8 @@
-### About
+## About
 This repository contains python3 scripts for situation recognition in images with **Graph Neural Network**.
 Code is adapted from thilinicooray/context-aware-reasoning-for-sr
 
-## Features
+### Features
 - [x] train GNN model
 - [x] analize subset
 - [x] analize single image not in dataset
@@ -14,9 +14,9 @@ Check [PyTorch](https://pytorch.org/get-started/locally/) website for more info.
 
 ## Get Started
 * Download [imSitu dataset](http://imsitu.org/download/) and extract in this repository.
-Train the model from scratch or download pretrained one from [here](https://drive.google.com/file/d/1Qt05fxtHW1B0zGnb7_jUf5lMOX5vpga5/view?usp=sharing) and put in saving folder (default 'checkpoints' in this repo).
-Use it!
-
+* Train the model from scratch or download pretrained one from [here](https://drive.google.com/file/d/1Qt05fxtHW1B0zGnb7_jUf5lMOX5vpga5/view?usp=sharing) and put in saving folder (default 'checkpoints' in this repo).
+* Use it!
+## Usage
 ```bash
 $ python3 -u sr.py --resume_model="resnet152_sr" --test_img="giving_267.png"
 train set stats: 
@@ -83,4 +83,26 @@ training losses = [v: 6.27, n: 18.01, gt: 18.15]
 5-verb: 1.67, 5-value: 73.02, 5-value-all: 17.32
 gt-value: 33.24, gt-value-all: 6.29, mean = 21.62
 --------------------------------------------------
+val losses = [v: 6.20, n: 15.93, gt: 16.03]
+1-verb: 0.55, 1-value: 51.82, 1-value-all: 13.15
+5-verb: 2.48, 5-value: 88.33, 5-value-all: 26.71
+gt-value: 49.19, gt-value-all: 10.93, mean = 30.40
+```
+or
+```
+python -u sr.py --imgset_dir='resized_256' --dataset_folder='imSitu' --resume_model='resnet152_sr' --batch_size 6144
+Loading encoder file
+Using 4 GPUs!
+Resume training from: resnet152_sr
+Model training started!
+Epoch-30, lr: 0.0020
+training losses = [v: 2.27, n: 9.42, gt: 7.95]
+1-verb: 44.96, 1-value: 79.22, 1-value-all: 48.33
+5-verb: 73.41, 5-value: 97.80, 5-value-all: 64.74
+gt-value: 92.59, gt-value-all: 64.62, mean = 70.71
+--------------------------------------------------
+val losses = [v: 3.04, n: 10.08, gt: 8.00]
+1-verb: 32.37, 1-value: 74.68, 1-value-all: 42.99
+5-verb: 59.52, 5-value: 97.36, 5-value-all: 60.70
+gt-value: 92.72, gt-value-all: 65.09, mean = 65.68
 ```
