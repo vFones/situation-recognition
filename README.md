@@ -28,7 +28,9 @@ Resume training from: resnet152_sr
 No ground truth verb found, calculating by myself...
 &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 Analizing:  giving_267.png
+```
 ![image](https://i.ibb.co/cx7yH2p/giving-267.png)
+```
 &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
 action (95.17%): paying
 good (75.01%): -
@@ -68,4 +70,17 @@ action: celebrating
 occasion = [-, -, -]
 place = [plaza, -, outdoors]
 agent = [people, people, people]
+```
+or
+```
+$ python -u sr.py --imgset_dir='resized_256' --dataset_folder='imSitu' --model_saving_name='resnet152_sr' --batch_size 6144
+Loading encoder file
+Using 4 GPUs!
+Model training started!
+Epoch-0, lr: 0.0020
+training losses = [v: 6.27, n: 18.01, gt: 18.15]
+1-verb: 0.33, 1-value: 34.73, 1-value-all: 6.36
+5-verb: 1.67, 5-value: 73.02, 5-value-all: 17.32
+gt-value: 33.24, gt-value-all: 6.29, mean = 21.62
+--------------------------------------------------
 ```
