@@ -14,7 +14,7 @@ Check [PyTorch](https://pytorch.org/get-started/locally/) website for more info.
 
 ## Get Started
 * Download [imSitu dataset](http://imsitu.org/download/) and extract in this repository.
-* Train the model from scratch or download pretrained one from [here](https://drive.google.com/file/d/1Qt05fxtHW1B0zGnb7_jUf5lMOX5vpga5/view?usp=sharing) and put in saving folder (default 'checkpoints' in this repo).
+* Train the model from scratch or download pretrained one from [here](https://drive.google.com/file/d/13kLPviXO_UAMgq3OSFcksH_K6qBPNkiH/view?usp=sharing) and put in saving folder (default 'checkpoints' in this repo).
 * Use it!
 ## Usage
 ```bash
